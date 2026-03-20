@@ -194,8 +194,22 @@ public class LlmServiceImpl implements LlmService {
         if (response != null &&
             response.getResults() != null &&
             !response.getResults().isEmpty()) {
-            return response.getResults().get(0).getOutput().getText();
+            String text = response.getResults().get(0).getOutput().getText();
+            return filterThinkingProcess(text);
         }
         return "";
+    }
+
+    /**
+     * 过滤 DeepSeek 思考过程标签
+     * DeepSeek 模型会在响应中包含 <think>...</think> 标签，需要过滤掉
+     */
+    private String filterThinkingProcess(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        return text.replaceAll("<think>[\\s\\S]*?</think>", "")
+                   .replaceAll("\\[\\[Final Answer\\]\\]", "")
+                   .trim();
     }
 }

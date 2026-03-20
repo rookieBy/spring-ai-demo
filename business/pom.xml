@@ -22,6 +22,10 @@
         </dependency>
         <dependency>
             <groupId>com.wifiin.newsay.ai</groupId>
+            <artifactId>api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.wifiin.newsay.ai</groupId>
             <artifactId>llm</artifactId>
         </dependency>
 
@@ -35,6 +39,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- Web for Controllers -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
         <!-- Test -->
