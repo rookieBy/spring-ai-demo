@@ -38,7 +38,6 @@
         <druid.version>1.2.21</druid.version>
         <redisson.version>3.27.0</redisson.version>
         <hutool.version>5.8.26</hutool.version>
-        <lombok.version>1.18.30</lombok.version>
         <log4j.version>2.23.1</log4j.version>
     </properties>
 
@@ -99,13 +98,6 @@
                 <version>${hutool.version}</version>
             </dependency>
 
-            <!-- Lombok -->
-            <dependency>
-                <groupId>org.projectlombok</groupId>
-                <artifactId>lombok</artifactId>
-                <version>${lombok.version}</version>
-            </dependency>
-
             <!-- Project Modules -->
             <dependency>
                 <groupId>com.wifiin.newsay.ai</groupId>
@@ -142,14 +134,6 @@
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <version>${spring-boot.version}</version>
-                    <configuration>
-                        <excludes>
-                            <exclude>
-                                <groupId>org.projectlombok</groupId>
-                                <artifactId>lombok</artifactId>
-                            </exclude>
-                        </excludes>
-                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>

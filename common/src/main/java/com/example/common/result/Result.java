@@ -1,12 +1,10 @@
 package com.example.common.result;
 
-import lombok.Data;
 import java.io.Serializable;
 
 /**
  * Unified API Response
  */
-@Data
 public class Result<T> implements Serializable {
     private int code;
     private String message;
@@ -36,5 +34,37 @@ public class Result<T> implements Serializable {
         result.setMessage(message);
         result.setTimestamp(System.currentTimeMillis());
         return result;
+    }
+
+    public int getCode() {
+        return code;
+    }
+
+    public void setCode(int code) {
+        this.code = code;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+
+    public T getData() {
+        return data;
+    }
+
+    public void setData(T data) {
+        this.data = data;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(long timestamp) {
+        this.timestamp = timestamp;
     }
 }

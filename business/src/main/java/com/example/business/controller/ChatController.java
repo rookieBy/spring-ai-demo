@@ -4,7 +4,8 @@ import com.example.api.dto.ChatRequest;
 import com.example.common.result.Result;
 import com.example.llm.service.LlmService;
 import jakarta.validation.Valid;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -15,10 +16,11 @@ import java.util.Map;
  * Chat Controller - Handles chat requests to various LLMs
  * 放在 business 模块，因为这是业务入口
  */
-@Slf4j
 @RestController
 @RequestMapping("/api/chat")
 public class ChatController {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatController.class);
 
     private final LlmService llmService;
 

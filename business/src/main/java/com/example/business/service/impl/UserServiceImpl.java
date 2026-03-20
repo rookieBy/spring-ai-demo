@@ -1,13 +1,11 @@
 package com.example.business.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.business.entity.User;
 import com.example.business.mapper.UserMapper;
 import com.example.business.service.UserService;
-import com.example.common.exception.BusinessException;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -16,78 +14,51 @@ import java.util.List;
 /**
  * User Service Implementation
  */
-@Slf4j
 @Service
-public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
+public class UserServiceImpl implements UserService {
 
-    private final RedisTemplate<String, Object> redisTemplate;
-    private static final String USER_CACHE_PREFIX = "user:";
+    private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
 
-    public UserServiceImpl(RedisTemplate<String, Object> redisTemplate) {
-        this.redisTemplate = redisTemplate;
-    }
+    @Autowired
+    private UserMapper userMapper;
 
     @Override
     public User getUserById(Long id) {
-        String cacheKey = USER_CACHE_PREFIX + id;
-        User cachedUser = (User) redisTemplate.opsForValue().get(cacheKey);
-        if (cachedUser != null) {
-            log.info("User found in cache: {}", id);
-            return cachedUser;
-        }
-
-        User user = getById(id);
-        if (user != null) {
-            redisTemplate.opsForValue().set(cacheKey, user);
-            log.info("User cached: {}", id);
-        }
-        return user;
+        log.info("Getting user by ID: {}", id);
+        return userMapper.selectById(id);
     }
 
     @Override
     public List<User> getAllUsers() {
-        return list();
+        log.info("Getting all users");
+        return userMapper.selectList(null);
     }
 
     @Override
     public List<User> searchUsers(String keyword) {
-        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-        wrapper.like(User::getUsername, keyword)
-                .or()
-                .like(User::getEmail, keyword);
-        return list(wrapper);
+        log.info("Searching users with keyword: {}", keyword);
+        return userMapper.searchUsers(keyword);
     }
 
     @Override
     public User createUser(User user) {
+        log.info("Creating user: {}", user.getUsername());
         user.setCreateTime(LocalDateTime.now());
-        user.setUpdateTime(LocalDateTime.now());
-        if (!save(user)) {
-            throw new BusinessException("Failed to create user");
-        }
-        log.info("User created: {}", user.getId());
+        userMapper.insert(user);
         return user;
     }
 
     @Override
     public User updateUser(User user) {
+        log.info("Updating user: {}", user.getId());
         user.setUpdateTime(LocalDateTime.now());
-        if (!updateById(user)) {
-            throw new BusinessException("Failed to update user");
-        }
-
-        // Invalidate cache
-        redisTemplate.delete(USER_CACHE_PREFIX + user.getId());
-        log.info("User updated and cache invalidated: {}", user.getId());
+        userMapper.updateById(user);
         return user;
     }
 
     @Override
     public void deleteUser(Long id) {
-        if (!removeById(id)) {
-            throw new BusinessException("Failed to delete user");
-        }
-        redisTemplate.delete(USER_CACHE_PREFIX + id);
-        log.info("User deleted and cache invalidated: {}", id);
+        log.info("Deleting user: {}", id);
+        userMapper.deleteById(id);
     }
 }

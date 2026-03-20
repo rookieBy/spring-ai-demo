@@ -2,7 +2,8 @@ package com.example.llm.service.impl;
 
 import com.example.llm.enums.LlmModel;
 import com.example.llm.service.LlmService;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -24,9 +25,10 @@ import reactor.core.publisher.Flux;
  * - Qwen: https://dashscope.aliyuncs.com/compatible-mode/v1
  * - OpenAI: https://api.openai.com/v1
  */
-@Slf4j
 @Service
 public class LlmServiceImpl implements LlmService {
+
+    private static final Logger log = LoggerFactory.getLogger(LlmServiceImpl.class);
 
     @Value("${spring.ai.openai.api-key}")
     private String openAiApiKey;
