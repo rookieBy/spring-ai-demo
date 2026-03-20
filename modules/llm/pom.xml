@@ -21,19 +21,11 @@
             <artifactId>common</artifactId>
         </dependency>
 
-        <!-- Spring AI OpenAI -->
+        <!-- Spring AI OpenAI (used for DeepSeek, GLM, Qwen - all OpenAI compatible) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
         </dependency>
-
-        <!-- Spring AI Alibaba (Qwen) - Optional, add version if needed
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-alibaba-spring-boot-starter</artifactId>
-            <version>1.0.0-M6</version>
-        </dependency>
-        -->
 
         <!-- Spring Boot Web for SSE -->
         <dependency>
