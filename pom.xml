@@ -4,12 +4,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.example</groupId>
-    <artifactId>spring-ai-demo</artifactId>
+    <groupId>com.wifiin.newsay.ai</groupId>
+    <artifactId>newsay-server-ai</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
 
-    <name>Spring AI Demo Parent</name>
+    <name>Newsay Server AI</name>
     <description>Spring AI Multi-Module Project with LLM Integration</description>
 
     <parent>
@@ -20,11 +20,11 @@
     </parent>
 
     <modules>
-        <module>modules/common</module>
-        <module>modules/api</module>
-        <module>modules/llm</module>
-        <module>modules/business</module>
-        <module>modules/launcher</module>
+        <module>common</module>
+        <module>api</module>
+        <module>llm</module>
+        <module>business</module>
+        <module>launcher</module>
     </modules>
 
     <properties>
@@ -39,6 +39,7 @@
         <redisson.version>3.27.0</redisson.version>
         <hutool.version>5.8.26</hutool.version>
         <lombok.version>1.18.30</lombok.version>
+        <log4j.version>2.23.1</log4j.version>
     </properties>
 
     <dependencyManagement>
@@ -57,6 +58,15 @@
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
                 <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Log4j2 -->
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-bom</artifactId>
+                <version>${log4j.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -98,27 +108,27 @@
 
             <!-- Project Modules -->
             <dependency>
-                <groupId>com.example</groupId>
+                <groupId>com.wifiin.newsay.ai</groupId>
                 <artifactId>common</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.example</groupId>
+                <groupId>com.wifiin.newsay.ai</groupId>
                 <artifactId>api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.example</groupId>
+                <groupId>com.wifiin.newsay.ai</groupId>
                 <artifactId>llm</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.example</groupId>
+                <groupId>com.wifiin.newsay.ai</groupId>
                 <artifactId>business</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.example</groupId>
+                <groupId>com.wifiin.newsay.ai</groupId>
                 <artifactId>launcher</artifactId>
                 <version>${project.version}</version>
             </dependency>
