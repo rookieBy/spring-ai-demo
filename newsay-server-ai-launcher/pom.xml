@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.wifiin.newsay.ai</groupId>
+        <artifactId>newsay-server-ai</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>newsay-server-ai-launcher</artifactId>
+    <packaging>jar</packaging>
+    <name>Launcher Module</name>
+    <description>Application Launcher Module</description>
+
+    <dependencies>
+        <!-- All Modules -->
+        <dependency>
+            <groupId>com.wifiin.newsay.ai</groupId>
+            <artifactId>newsay-server-ai-common</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.wifiin.newsay.ai</groupId>
+            <artifactId>newsay-server-ai-api</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.wifiin.newsay.ai</groupId>
+            <artifactId>newsay-server-ai-llm</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.wifiin.newsay.ai</groupId>
+            <artifactId>newsay-server-ai-business</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+    </dependencies>
+
+    <properties>
+        <start-class>com.wifiin.newsay.ai.launcher.Application</start-class>
+    </properties>
+
+
+    <build>
+        <resources>
+            <!-- 1. 主资源目录：开启过滤，仅包含配置文件 -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <includes>
+                    <include>application.properties</include>
+                    <include>constant.properties</include>
+                    <include>application-${env}.properties</include>
+                    <include>log4j2-spring.xml</include>
+                    <include>banner.txt</include>
+                </includes>
+                <filtering>true</filtering>
+            </resource>
+
+            <!-- 3. 启动脚本资源 -->
+            <resource>
+                <directory>src/main/bin</directory>
+                <includes>
+                    <include>springboot</include>
+                </includes>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+
+        <plugins>
+            <!-- 清理插件 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <configuration>
+                    <verbose>true</verbose>
+                    <filesets>
+                        <fileset>
+                            <directory>./target/</directory>
+                        </fileset>
+                        <fileset>
+                            <directory>../current</directory>
+                        </fileset>
+                    </filesets>
+                </configuration>
+            </plugin>
+
+            <!-- 资源插件：仅保留生成启动脚本的功能，移除冲突的 copy-conf -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <configuration>
+                    <delimiters>
+                        <delimiter>@</delimiter>
+                    </delimiters>
+                    <useDefaultDelimiters>false</useDefaultDelimiters>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>conf-bash</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>./target/bin</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>./src/main/bin</directory>
+                                    <filtering>true</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Spring Boot 打包插件 -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- 部署拷贝插件 -->
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-package</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <copy todir="../current">
+                                    <fileset dir="./target/bin">
+                                        <include name="springboot"/>
+                                    </fileset>
+                                    <fileset dir="./target">
+                                        <include name="*.jar"/>
+                                    </fileset>
+                                </copy>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
