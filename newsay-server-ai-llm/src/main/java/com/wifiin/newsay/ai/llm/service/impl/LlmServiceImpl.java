@@ -1,9 +1,11 @@
 package com.wifiin.newsay.ai.llm.service.impl;
 
 import com.wifiin.newsay.ai.llm.enums.LlmModel;
+import com.wifiin.newsay.ai.llm.model.StreamChunk;
 import com.wifiin.newsay.ai.llm.service.LlmService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -11,14 +13,22 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 /**
  * LLM Service Implementation supporting multiple LLM providers via OpenAI-compatible API
  * Supports: DeepSeek, GLM (Zhipu), Qwen (Alibaba), OpenAI
- *
+ * <p>
  * All models use OpenAI-compatible endpoints with different base URLs:
  * - DeepSeek: https://api.deepseek.com
  * - GLM: https://open.bigmodel.cn/api/paas/v4
@@ -54,16 +64,18 @@ public class LlmServiceImpl implements LlmService {
     @Value("${spring.ai.dashscope.base-url:https://dashscope.aliyuncs.com/compatible-mode/v1}")
     private String dashScopeBaseUrl;
 
-    private final OpenAiApi openAiApi;
 
-    @Autowired(required = false)
-    public LlmServiceImpl(OpenAiApi openAiApi) {
-        this.openAiApi = openAiApi;
-    }
+    // Markdown 格式标记
+    private static final Pattern CODE_FENCE = Pattern.compile("```(\\w*)?");
+    private static final Pattern LIST_ITEM = Pattern.compile("^[\\s]*[-*+\\d.]\\s");
+    private static final Pattern TABLE_ROW = Pattern.compile("^\\|.+\\|$");
+    private static final Pattern HEADER = Pattern.compile("^#{1,6}\\s");
 
-    public LlmServiceImpl() {
-        this.openAiApi = null;
-    }
+
+    @Autowired
+    @Qualifier("llmRouter")
+    private Map<String, ChatClient> chatClientRouter;
+
 
     @Override
     public Flux<String> streamChat(String model, String message) {
@@ -113,6 +125,7 @@ public class LlmServiceImpl implements LlmService {
         });
     }
 
+
     @Override
     public String chat(String model, String message) {
         LlmModel llmModel = LlmModel.fromValue(model);
@@ -127,6 +140,7 @@ public class LlmServiceImpl implements LlmService {
     public String chat(String message) {
         return chat("deepseek", message);
     }
+
 
     private String chat(String message, String apiKey, String baseUrl, String model) {
         OpenAiApi tempApi = OpenAiApi.builder()
@@ -188,8 +202,8 @@ public class LlmServiceImpl implements LlmService {
 
     private String extractContent(ChatResponse response) {
         if (response != null &&
-            response.getResults() != null &&
-            !response.getResults().isEmpty()) {
+                response.getResults() != null &&
+                !response.getResults().isEmpty()) {
             String text = response.getResults().get(0).getOutput().getText();
             return filterThinkingProcess(text);
         }
@@ -205,7 +219,116 @@ public class LlmServiceImpl implements LlmService {
             return text;
         }
         return text.replaceAll("<think>[\\s\\S]*?</think>", "")
-                   .replaceAll("\\[\\[Final Answer\\]\\]", "")
-                   .trim();
+                .replaceAll("\\[\\[Final Answer\\]\\]", "")
+                .trim();
     }
+
+
+    //
+
+    @Override
+    public Flux<ServerSentEvent<StreamChunk>> smartStream(String model, String message) {
+        ChatClient chatClient = chatClientRouter.get("deepseek");
+        return chatClient.prompt()
+                .user(message)
+                .stream()
+                .content()
+                .transform(this::markdownAwareAggregator)
+                .map(chunk -> ServerSentEvent.<StreamChunk>builder()
+                        .data(chunk)
+                        .build())
+                .concatWith(Flux.just(
+                        ServerSentEvent.<StreamChunk>builder()
+                                .data(new StreamChunk("done", "", null))
+                                .event("complete")
+                                .build()
+                ));
+    }
+
+    /**
+     * Markdown 感知聚合器
+     * 保持格式完整性：代码块、表格、列表不截断
+     */
+    private Flux<StreamChunk> markdownAwareAggregator(Flux<String> source) {
+
+        AtomicReference<ParseState> state = new AtomicReference<>(new ParseState());
+
+        return source.concatMap(token -> {
+            ParseState s = state.get();
+            s.buffer.append(token);
+
+            List<StreamChunk> chunks = new ArrayList<>();
+            String content = s.buffer.toString();
+
+            // 检测代码块边界
+            if (content.contains("```")) {
+                int fenceCount = countOccurrences(content, "```");
+                if (fenceCount % 2 == 0 && fenceCount > 0) {
+                    // 完整代码块，可以发送
+                    chunks.add(createChunk(content, detectFormat(content)));
+                    s.buffer.setLength(0);
+                }
+            }
+            // 检测表格行（多行结构）
+            else if (TABLE_ROW.matcher(content).find()) {
+                if (content.contains("\n") && content.lines().count() >= 2) {
+                    chunks.add(createChunk(content, "table"));
+                    s.buffer.setLength(0);
+                }
+            }
+            // 检测列表项
+            else if (LIST_ITEM.matcher(content).find() && content.endsWith("\n")) {
+                chunks.add(createChunk(content, "list"));
+                s.buffer.setLength(0);
+            }
+            // 检测标题
+            else if (HEADER.matcher(content).find() && content.endsWith("\n")) {
+                chunks.add(createChunk(content, "heading"));
+                s.buffer.setLength(0);
+            }
+            // 普通段落：按句子边界或长度刷新
+            else if (shouldFlushParagraph(content)) {
+                chunks.add(createChunk(content, "paragraph"));
+                s.buffer.setLength(0);
+            }
+
+            return Flux.fromIterable(chunks);
+
+        }).concatWith(Flux.defer(() -> {
+            // 发送剩余内容
+            ParseState s = state.get();
+            if (!s.buffer.isEmpty()) {
+                return Flux.just(createChunk(s.buffer.toString(), "text"));
+            }
+            return Flux.empty();
+        }));
+    }
+
+    private boolean shouldFlushParagraph(String content) {
+        // 中文标点 + 换行，或累积超过 100 字符
+        return content.matches(".*[。！？\\n]$") || content.length() > 100;
+    }
+
+    private StreamChunk createChunk(String content, String format) {
+        return new StreamChunk("content", content, format);
+    }
+
+    private String detectFormat(String content) {
+        if (content.startsWith("```")) {
+            String lang = content.substring(3, content.indexOf('\n')).trim();
+            return "code:" + (lang.isEmpty() ? "text" : lang);
+        }
+        return "text";
+    }
+
+    private int countOccurrences(String str, String sub) {
+        return str.split(sub, -1).length - 1;
+    }
+
+    // 状态持有类
+    private static class ParseState {
+        StringBuilder buffer = new StringBuilder();
+    }
+
+
 }

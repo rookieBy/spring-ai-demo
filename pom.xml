@@ -98,6 +98,7 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <spring-ai.version>1.0.0-M6</spring-ai.version>
+<!--        <spring-ai.version>1.1.0-M4</spring-ai.version>-->
         <spring-boot.version>3.2.3</spring-boot.version>
         <mybatis-plus.version>3.0.5</mybatis-plus.version>
         <druid.version>1.2.21</druid.version>
@@ -151,11 +152,11 @@
                 <version>${redisson.version}</version>
             </dependency>
 
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-starter-undertow</artifactId>
-                <version>3.5.11</version>
-            </dependency>
+<!--            <dependency>-->
+<!--                <groupId>org.springframework.boot</groupId>-->
+<!--                <artifactId>spring-boot-starter-undertow</artifactId>-->
+<!--                <version>3.5.11</version>-->
+<!--            </dependency>-->
 
             <!-- Hutool -->
             <dependency>
@@ -176,10 +177,11 @@
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-starter-logging</artifactId>
                 </exclusion>
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-starter-tomcat</artifactId>
-                </exclusion>
+                    <!-- 排除 Undertow -->
+                    <exclusion>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-undertow</artifactId>
+                    </exclusion>
             </exclusions>
         </dependency>
 
@@ -241,7 +243,7 @@
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-undertow</artifactId>
+            <artifactId>spring-boot-starter-tomcat</artifactId>
         </dependency>
 
         <!-- Hutool -->
@@ -291,7 +293,7 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-core</artifactId>
+            <artifactId>spring-ai-mcp</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
@@ -300,6 +302,10 @@
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-openai</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
         </dependency>
     </dependencies>
 

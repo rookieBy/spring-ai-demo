@@ -1,5 +1,7 @@
 package com.wifiin.newsay.ai.llm.service;
 
+import com.wifiin.newsay.ai.llm.model.StreamChunk;
+import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 
 /**
@@ -26,4 +28,7 @@ public interface LlmService {
      * Chat with default model
      */
     String chat(String message);
+
+
+    Flux<ServerSentEvent<StreamChunk>> smartStream( String model,String message);
 }

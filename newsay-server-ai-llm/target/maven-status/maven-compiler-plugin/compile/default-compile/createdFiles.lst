@@ -1,4 +1,9 @@
 com\wifiin\newsay\ai\llm\service\impl\LlmServiceImpl$1.class
+com\wifiin\newsay\ai\llm\service\impl\LlmServiceImpl$ParseState.class
+com\wifiin\newsay\ai\llm\service\LLMConfig.class
+com\wifiin\newsay\ai\llm\enums\LlmModel.class
+com\wifiin\newsay\ai\llm\model\StreamChunk.class
 com\wifiin\newsay\ai\llm\service\impl\LlmServiceImpl.class
 com\wifiin\newsay\ai\llm\service\LlmService.class
-com\wifiin\newsay\ai\llm\enums\LlmModel.class
+com\wifiin\newsay\ai\llm\service\LLMProperties$ProviderConfig.class
+com\wifiin\newsay\ai\llm\service\LLMProperties.class

@@ -2,11 +2,13 @@ package com.wifiin.newsay.ai.business.controller;
 
 import com.wifiin.newsay.ai.api.dto.ChatRequest;
 import com.wifiin.newsay.ai.common.result.Result;
+import com.wifiin.newsay.ai.llm.model.StreamChunk;
 import com.wifiin.newsay.ai.llm.service.LlmService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
@@ -40,8 +42,26 @@ public class ChatController {
         return llmService.streamChat(model, request.getMessage())
                 .map(content -> {
                     log.warn("Streaming content: {}", content);
-                    return content ;
+                    return content;
                 });
+    }
+
+    /**
+     * Streaming chat endpoint - returns SSE  markdown
+     */
+    @PostMapping(value = "/stream/markdown", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<StreamChunk>> smartStream(@Valid @RequestBody ChatRequest request) {
+        log.info("Received streaming chat request - model: {}, message: {}",
+                request.getModel(), request.getMessage());
+
+        String model = request.getModel() != null ? request.getModel() : "deepseek";
+        return llmService.smartStream(model, request.getMessage());
+    }
+
+    @GetMapping(value = "/thread-info", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> testThread() {
+        Thread thread = Thread.currentThread();
+        return Map.of("threadName", thread.getName(), "isVirtual", thread.isVirtual(), "threadClass", thread.getClass().getName());
     }
 
     /**
