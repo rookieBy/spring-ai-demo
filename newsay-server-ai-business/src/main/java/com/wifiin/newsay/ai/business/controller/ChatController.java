@@ -89,4 +89,10 @@ public class ChatController {
                 "openai", "OpenAI GPT"
         ));
     }
+
+    @GetMapping("/search")
+    public String search(@RequestParam("q") String question) {
+        return llmService.mcpSearch(question);
+    }
+
 }

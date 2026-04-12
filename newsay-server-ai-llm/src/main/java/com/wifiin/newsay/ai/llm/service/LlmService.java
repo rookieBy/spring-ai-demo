@@ -30,5 +30,7 @@ public interface LlmService {
     String chat(String message);
 
 
-    Flux<ServerSentEvent<StreamChunk>> smartStream( String model,String message);
+    Flux<ServerSentEvent<StreamChunk>> smartStream(String model, String message);
+
+    String mcpSearch(String message);
 }

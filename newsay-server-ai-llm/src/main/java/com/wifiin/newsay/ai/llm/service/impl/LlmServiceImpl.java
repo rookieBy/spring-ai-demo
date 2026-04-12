@@ -245,6 +245,15 @@ public class LlmServiceImpl implements LlmService {
                 ));
     }
 
+    @Override
+    public String mcpSearch(String message) {
+        return chatClientRouter.get("minimax").prompt()
+                .user("请搜索以下信息：" + message)
+                .tools("web_search")  // 指定使用 Minimax 的 web_search 工具
+                .call()
+                .content();
+    }
+
     /**
      * Markdown 感知聚合器
      * 保持格式完整性：代码块、表格、列表不截断

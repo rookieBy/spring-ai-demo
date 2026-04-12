@@ -19,6 +19,7 @@ public class LLMProperties {
     private ProviderConfig deepseek = new ProviderConfig();
     private ProviderConfig qwen = new ProviderConfig();
     private ProviderConfig glm = new ProviderConfig();
+    private ProviderConfig minimax = new ProviderConfig();
 
     public ProviderConfig getDeepseek() {
         return deepseek;
@@ -42,6 +43,14 @@ public class LLMProperties {
 
     public void setGlm(ProviderConfig glm) {
         this.glm = glm;
+    }
+
+    public ProviderConfig getMinimax() {
+        return minimax;
+    }
+
+    public void setMinimax(ProviderConfig minimax) {
+        this.minimax = minimax;
     }
 
     public static class ProviderConfig {
@@ -103,6 +112,7 @@ public class LLMProperties {
             case "deepseek" -> deepseek;
             case "qwen" -> qwen;
             case "glm" -> glm;
+            case "minimax"->minimax;
             default -> null;
         };
     }

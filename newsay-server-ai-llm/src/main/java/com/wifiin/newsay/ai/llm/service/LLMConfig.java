@@ -1,18 +1,26 @@
 package com.wifiin.newsay.ai.llm.service;
 
+import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.client.transport.ServerParameters;
+import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.lang.Nullable;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 @Configuration
 public class LLMConfig {
@@ -20,7 +28,7 @@ public class LLMConfig {
     @Autowired
     private LLMProperties properties;
 
-    private ChatClient createClient(String providerName) {
+    private ChatClient createClient(String providerName, @Nullable ToolCallbackProvider provider) {
         LLMProperties.ProviderConfig cfg = properties.getProvider(providerName);
         System.out.println("configMap:" + cfg);
 
@@ -42,34 +50,77 @@ public class LLMConfig {
         var openAiApi = new OpenAiApi(cfg.getBaseUrl(), cfg.getApiKey());
         var chatModel = new OpenAiChatModel(openAiApi);
 
-        return ChatClient.builder(chatModel)
+        ChatClient.Builder builder = ChatClient.builder(chatModel)
                 .defaultOptions(OpenAiChatOptions.builder()
                         .model(cfg.getModel())
                         .temperature(cfg.getTemperature() != null ? cfg.getTemperature() : 0.7)
-                        .build())
-                .build();
+                        .build());
+        if (!Objects.isNull(provider)) {
+            builder.defaultTools(provider);
+        }
+        return builder.build();
     }
 
     @Bean("deepseekChatClient")
     public ChatClient deepseekChatClient() {
-        return createClient("deepseek");
+        return createClient("deepseek", null);
     }
 
     @Bean("qwenChatClient")
     public ChatClient qwenChatClient() {
-        return createClient("qwen");
+        return createClient("qwen", null);
     }
 
     @Bean("glmChatClient")
     public ChatClient glmChatClient() {
-        return createClient("glm");
+        return createClient("glm", null);
     }
+
+    @Bean("minimaxChatClient")
+    public ChatClient minimaxChatClient(@Qualifier("minimaxMcp") ToolCallbackProvider provider) {
+        return createClient("minimax", provider);
+    }
+
+
+    @Bean(destroyMethod = "close")
+    public McpSyncClient minimaxMcpClient() {
+        LLMProperties.ProviderConfig cfg = properties.getProvider("minimax");
+
+        // 创建 STDIO 传输层 - 启动 Minimax MCP 服务器进程
+        ServerParameters params = ServerParameters.builder("uvx")
+                .args("minimax-coding-plan-mcp", "-y")
+                .env(Map.of(
+                        "MINIMAX_API_KEY", cfg.getApiKey(),
+                        "MINIMAX_API_HOST", cfg.getBaseUrl()
+                ))
+                .build();
+
+        StdioClientTransport transport = new StdioClientTransport(params);
+
+        // 创建同步 MCP 客户端
+        McpSyncClient client = McpClient.sync(transport).build();
+
+        // 初始化连接（可选：验证服务器是否正常）
+        client.initialize();
+
+        return client;
+    }
+
+    @Bean("minimaxMcp")
+    public ToolCallbackProvider minimaxTools(McpSyncClient minimaxMcpClient) {
+        System.out.println("minimaxTools initial:" + Objects.isNull(minimaxMcpClient));
+        ToolCallbackProvider provider = new SyncMcpToolCallbackProvider(minimaxMcpClient);
+        return provider;
+    }
+
 
     @Bean("llmRouter")
     public Map<String, ChatClient> chatClientRouter(
             @Qualifier("deepseekChatClient") ObjectProvider<ChatClient> deepseekProvider,
             @Qualifier("qwenChatClient") ObjectProvider<ChatClient> qwenProvider,
-            @Qualifier("glmChatClient") ObjectProvider<ChatClient> glmProvider) {
+            @Qualifier("glmChatClient") ObjectProvider<ChatClient> glmProvider,
+            @Qualifier("minimaxChatClient") ObjectProvider<ChatClient> minimaxProvider
+    ) {
 
         Map<String, ChatClient> router = new HashMap<>();
 
@@ -77,6 +128,7 @@ public class LLMConfig {
         deepseekProvider.ifAvailable(client -> router.put("deepseek", client));
         qwenProvider.ifAvailable(client -> router.put("qwen", client));
         glmProvider.ifAvailable(client -> router.put("glm", client));
+        minimaxProvider.ifAvailable(client -> router.put("minimax", client));
 
         if (router.isEmpty()) {
             throw new IllegalStateException("No LLM provider configured!");
