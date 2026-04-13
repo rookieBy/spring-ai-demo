@@ -248,8 +248,7 @@ public class LlmServiceImpl implements LlmService {
     @Override
     public String mcpSearch(String message) {
         return chatClientRouter.get("minimax").prompt()
-                .user("请搜索以下信息：" + message)
-                .tools("web_search")  // 指定使用 Minimax 的 web_search 工具
+                .user("请使用联网搜索工具搜索以下信息：" + message)
                 .call()
                 .content();
     }
