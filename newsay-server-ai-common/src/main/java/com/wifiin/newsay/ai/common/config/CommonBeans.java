@@ -1,6 +1,7 @@
 package com.wifiin.newsay.ai.common.config;
 
-import com.alibaba.druid.pool.DruidDataSource;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.redisson.Redisson;
@@ -46,39 +47,41 @@ public class CommonBeans {
     @Value("${spring.datasource.mysql.driver-class-name}")
     private String dbDriverClass;
 
-    @Value("${spring.datasource.druid.initial-size}")
-    private int druidInitialSize;
+    @Value("${spring.datasource.hikari.minimum-idle:5}")
+    private int hikariMinIdle;
 
-    @Value("${spring.datasource.druid.min-idle}")
-    private int druidMinIdle;
+    @Value("${spring.datasource.hikari.maximum-pool-size:10}")
+    private int hikariMaxActive;
 
-    @Value("${spring.datasource.druid.max-active}")
-    private int druidMaxActive;
+    @Value("${spring.datasource.hikari.connection-timeout:30000}")
+    private long hikariConnectionTimeout;
 
-    @Value("${spring.datasource.mysql.connectionTimeout}")
-    private int mysqlConnectionTimeout;
-    @Value("${spring.datasource.mysql.connectionInitSql}")
+    @Value("${spring.datasource.hikari.idle-timeout:600000}")
+    private long hikariIdleTimeout;
+
+    @Value("${spring.datasource.hikari.max-lifetime:1800000}")
+    private long hikariMaxLifetime;
+
+    @Value("${spring.datasource.mysql.connectionInitSql:select 1}")
     private String mysqlTestSql;
-    @Value("${spring.datasource.mysql.validationTimeout}")
-    private int validationTimeout;
 
 
     @Bean
     @Primary
     public DataSource dataSource() {
-        logger.info("Initializing Druid DataSource with URL: {}", dbUrl);
-        DruidDataSource dataSource = new DruidDataSource();
-        dataSource.setUrl(dbUrl);
-        dataSource.setUsername(dbUsername);
-        dataSource.setPassword(dbPassword);
-        dataSource.setDriverClassName(dbDriverClass);
-        dataSource.setInitialSize(druidInitialSize);
-        dataSource.setMinIdle(druidMinIdle);
-        dataSource.setMaxActive(druidMaxActive);
-        dataSource.setConnectTimeout(mysqlConnectionTimeout);
-        dataSource.setConnectionInitSqls(Collections.singletonList(mysqlTestSql));
-        dataSource.setValidationQueryTimeout(validationTimeout);
-        return dataSource;
+        logger.info("Initializing HikariCP DataSource with URL: {}", dbUrl);
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(dbUrl);
+        config.setUsername(dbUsername);
+        config.setPassword(dbPassword);
+        config.setDriverClassName(dbDriverClass);
+        config.setMinimumIdle(hikariMinIdle);
+        config.setMaximumPoolSize(hikariMaxActive);
+        config.setConnectionTimeout(hikariConnectionTimeout);
+        config.setIdleTimeout(hikariIdleTimeout);
+        config.setMaxLifetime(hikariMaxLifetime);
+        config.setConnectionTestQuery(mysqlTestSql);
+        return new HikariDataSource(config);
     }
 
     // ==================== Redis Configuration ====================
