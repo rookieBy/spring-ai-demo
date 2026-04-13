@@ -1,6 +1,5 @@
 package com.wifiin.newsay.ai.launcher;
 
-import org.apache.commons.lang3.time.StopWatch;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
@@ -22,9 +21,8 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 public class Application {
 
     public static void main(String[] args) {
-        StopWatch stopWatch = new StopWatch();
-        stopWatch.start();
+        long startTime = System.currentTimeMillis();
         SpringApplication.run(Application.class, args);
-        System.out.println("====== application start elapse: " + stopWatch.getTime() + "======");
+        System.out.println("====== application start elapse: " + (System.currentTimeMillis() - startTime) + "ms======");
     }
 }

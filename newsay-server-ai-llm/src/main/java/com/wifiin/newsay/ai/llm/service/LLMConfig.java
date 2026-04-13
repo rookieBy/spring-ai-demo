@@ -1,9 +1,11 @@
 package com.wifiin.newsay.ai.llm.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -47,8 +49,13 @@ public class LLMConfig {
             );
         }
 
-        var openAiApi = new OpenAiApi(cfg.getBaseUrl(), cfg.getApiKey());
-        var chatModel = new OpenAiChatModel(openAiApi);
+        var openAiApi = OpenAiApi.builder()
+                .apiKey(cfg.getApiKey())
+                .baseUrl(cfg.getBaseUrl())
+                .build();
+        var chatModel = OpenAiChatModel.builder()
+                .openAiApi(openAiApi)
+                .build();
 
         ChatClient.Builder builder = ChatClient.builder(chatModel)
                 .defaultOptions(OpenAiChatOptions.builder()
@@ -95,7 +102,7 @@ public class LLMConfig {
                 ))
                 .build();
 
-        StdioClientTransport transport = new StdioClientTransport(params);
+        StdioClientTransport transport = new StdioClientTransport(params, new JacksonMcpJsonMapper(new ObjectMapper()));
 
         // 创建同步 MCP 客户端
         McpSyncClient client = McpClient.sync(transport).build();
