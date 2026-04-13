@@ -63,7 +63,7 @@ public class LLMConfig {
                         .temperature(cfg.getTemperature() != null ? cfg.getTemperature() : 0.7)
                         .build());
         if (!Objects.isNull(provider)) {
-            builder.defaultTools(provider);
+            builder.defaultToolCallbacks(provider.getToolCallbacks());
         }
         return builder.build();
     }
