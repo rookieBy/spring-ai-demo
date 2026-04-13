@@ -1,15 +1,16 @@
 package com.wifiin.newsay.ai.llm.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
-import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
+import org.springframework.lang.Nullable;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
@@ -17,8 +18,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.lang.Nullable;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -34,7 +35,6 @@ public class LLMConfig {
         LLMProperties.ProviderConfig cfg = properties.getProvider(providerName);
         System.out.println("configMap:" + cfg);
 
-        // 防御性编程：配置缺失时抛出明确异常
         if (cfg == null) {
             throw new IllegalStateException(
                     "Provider '" + providerName + "' not configured. " +
@@ -58,7 +58,7 @@ public class LLMConfig {
                 .build();
 
         ChatClient.Builder builder = ChatClient.builder(chatModel)
-                .defaultOptions(OpenAiChatOptions.builder()
+                .defaultOptions(ToolCallingChatOptions.builder()
                         .model(cfg.getModel())
                         .temperature(cfg.getTemperature() != null ? cfg.getTemperature() : 0.7)
                         .build());
@@ -88,12 +88,10 @@ public class LLMConfig {
         return createClient("minimax", provider);
     }
 
-
     @Bean(destroyMethod = "close")
     public McpSyncClient minimaxMcpClient() {
         LLMProperties.ProviderConfig cfg = properties.getProvider("minimax");
 
-        // 创建 STDIO 传输层 - 启动 Minimax MCP 服务器进程
         ServerParameters params = ServerParameters.builder("uvx")
                 .args("minimax-coding-plan-mcp", "-y")
                 .env(Map.of(
@@ -102,13 +100,11 @@ public class LLMConfig {
                 ))
                 .build();
 
-        StdioClientTransport transport = new StdioClientTransport(params, new JacksonMcpJsonMapper(new ObjectMapper()));
+        StdioClientTransport transport = new StdioClientTransport(params, McpJsonDefaults.getMapper());
 
-        // 创建同步 MCP 客户端
-        McpSyncClient client = McpClient.sync(transport).build();
-
-        // 初始化连接（可选：验证服务器是否正常）
-        client.initialize();
+        McpSyncClient client = McpClient.sync(transport)
+                .requestTimeout(Duration.ofSeconds(60))
+                .build();
 
         return client;
     }
@@ -116,10 +112,8 @@ public class LLMConfig {
     @Bean("minimaxMcp")
     public ToolCallbackProvider minimaxTools(McpSyncClient minimaxMcpClient) {
         System.out.println("minimaxTools initial:" + Objects.isNull(minimaxMcpClient));
-        ToolCallbackProvider provider = new SyncMcpToolCallbackProvider(minimaxMcpClient);
-        return provider;
+        return new SyncMcpToolCallbackProvider(minimaxMcpClient);
     }
-
 
     @Bean("llmRouter")
     public Map<String, ChatClient> chatClientRouter(
@@ -128,10 +122,8 @@ public class LLMConfig {
             @Qualifier("glmChatClient") ObjectProvider<ChatClient> glmProvider,
             @Qualifier("minimaxChatClient") ObjectProvider<ChatClient> minimaxProvider
     ) {
-
         Map<String, ChatClient> router = new HashMap<>();
 
-        // 只有实际创建的 Bean 才加入路由
         deepseekProvider.ifAvailable(client -> router.put("deepseek", client));
         qwenProvider.ifAvailable(client -> router.put("qwen", client));
         glmProvider.ifAvailable(client -> router.put("glm", client));
