@@ -92,7 +92,7 @@ public class CommonBeans {
     @Value("${spring.data.redis.port:6379}")
     private int redisPort;
 
-    @Value("${spring.data.redis.password:root}")
+    @Value("${spring.data.redis.password:redis}")
     private String redisPassword;
 
     @Value("${spring.data.redis.database:0}")
