@@ -7,6 +7,7 @@ import com.wifiin.newsay.ai.llm.service.LlmService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -101,9 +102,19 @@ public class LlmServiceImpl implements LlmService {
 
     @Override
     public Flux<String> streamChat(String model, String message, String conversationId) {
-        // 检测是否为搜索查询，如果是则路由到 MCP
-        if (isSearchQuery(message)) {
-            return streamChatWithMcp(message, conversationId);
+        // Minimax 模型有 MCP 工具支持，让 LLM 自己决定是否调用搜索工具
+        if ("minimax".equalsIgnoreCase(model)) {
+            return streamChatWithMinimax(message, conversationId);
+        }
+
+        // 非 minimax 模型，检查对话历史是否在使用 MCP
+        if (conversationId != null && !conversationId.isEmpty()) {
+            List<Message> history = chatMemoryService.getHistory(conversationId);
+            boolean shouldContinueWithMcp = shouldContinueWithMcp(history);
+
+            if (shouldContinueWithMcp) {
+                return streamChatWithMinimax(message, conversationId);
+            }
         }
 
         if (conversationId == null || conversationId.isEmpty()) {
@@ -119,68 +130,59 @@ public class LlmServiceImpl implements LlmService {
     }
 
     /**
-     * 检测消息是否为搜索查询
+     * 判断是否应该继续使用 MCP（基于对话历史中是否有工具调用）
      */
-    private boolean isSearchQuery(String message) {
-        if (message == null || message.isEmpty()) {
+    private boolean shouldContinueWithMcp(List<Message> history) {
+        if (history == null || history.isEmpty()) {
             return false;
         }
-        String lowerMessage = message.toLowerCase();
-        return lowerMessage.contains("搜索") ||
-                lowerMessage.contains("查询") ||
-                lowerMessage.contains("最新") ||
-                lowerMessage.contains("今天") ||
-                lowerMessage.contains("昨天") ||
-                lowerMessage.contains("新闻") ||
-                lowerMessage.contains("天气") ||
-                lowerMessage.contains("股价") ||
-                lowerMessage.contains("股票") ||
-                lowerMessage.contains("实时") ||
-                lowerMessage.contains("现在") ||
-                lowerMessage.contains("最新") ||
-                lowerMessage.contains("联网") ||
-                lowerMessage.contains("网上") ||
-                lowerMessage.contains("网上查") ||
-                lowerMessage.contains("搜索一下");
+        // 检查历史消息中是否有 MCP 工具调用 - 简化为只检查最后一条assistant消息
+        // 如果历史不为空，说明用户在继续一个对话，应该保持使用同一个client
+        // 这里我们信任调用方的选择
+        return true;
     }
 
     /**
-     * 使用 MCP 流式搜索
+     * 使用 Minimax MCP 流式对话（LLM自己决定是否调用搜索工具）
      */
-    private Flux<String> streamChatWithMcp(String message, String conversationId) {
+    private Flux<String> streamChatWithMinimax(String message, String conversationId) {
         ChatClient chatClient = chatClientRouter.get("minimax");
-        String searchMessage = "请使用联网搜索工具搜索以下信息：" + message;
 
-        if (conversationId != null && !conversationId.isEmpty()) {
-            List<Message> history = chatMemoryService.getHistory(conversationId);
+        final List<Message> history;
+        final boolean hasConversation = conversationId != null && !conversationId.isEmpty();
+
+        if (hasConversation) {
+            history = chatMemoryService.getHistory(conversationId);
             chatMemoryService.addUserMessage(conversationId, message);
-
-            StringBuilder fullResponse = new StringBuilder();
-
-            return Flux.create(sink -> {
-                chatClient.prompt()
-                        .messages(history.toArray(new Message[0]))
-                        .user(searchMessage)
-                        .stream()
-                        .content()
-                        .subscribe(
-                                response -> {
-                                    fullResponse.append(response);
-                                    sink.next(response);
-                                },
-                                sink::error,
-                                () -> {
-                                    chatMemoryService.addAssistantMessage(conversationId, fullResponse.toString());
-                                    sink.complete();
-                                }
-                        );
-            });
         } else {
-            return chatClient.prompt()
-                    .user(searchMessage)
-                    .stream()
-                    .content();
+            history = null;
         }
+
+        StringBuilder fullResponse = new StringBuilder();
+
+        return Flux.create(sink -> {
+            var promptBuilder = chatClient.prompt();
+            if (history != null && !history.isEmpty()) {
+                promptBuilder.messages(history.toArray(new Message[0]));
+            }
+            promptBuilder.user(message);
+
+            promptBuilder.stream()
+                    .content()
+                    .subscribe(
+                            response -> {
+                                fullResponse.append(response);
+                                sink.next(response);
+                            },
+                            sink::error,
+                            () -> {
+                                if (hasConversation) {
+                                    chatMemoryService.addAssistantMessage(conversationId, fullResponse.toString());
+                                }
+                                sink.complete();
+                            }
+                    );
+        });
     }
 
     private Flux<String> streamChat(String message, String apiKey, String baseUrl, String model) {

@@ -27,7 +27,15 @@
       "Bash(claude:*)",
       "Bash(git pull:*)",
       "Bash(git stash:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(ls -la current/*.jar)",
+      "Bash(ls -la newsay-server-ai-launcher/target/*.jar)",
+      "Bash(xargs -r kill)",
+      "Bash(redis-cli ping:*)",
+      "Bash(wget:*)",
+      "Bash(kill 2011183)",
+      "Bash(export no_proxy=\"localhost,127.0.0.1\")",
+      "Bash(find /root/coding_plan/newsay-server-ai -name *.log -mmin -2)"
     ]
   }
 }
