@@ -21,3 +21,5 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+/id_ed25519_idea_spring_ai_demo.pub
+/id_ed25519_idea_spring_ai_demo
