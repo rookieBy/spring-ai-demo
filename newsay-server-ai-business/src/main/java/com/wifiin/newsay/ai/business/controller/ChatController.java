@@ -35,11 +35,11 @@ public class ChatController {
      */
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> streamChat(@Valid @RequestBody ChatRequest request) {
-        log.info("Received streaming chat request - model: {}, message: {}",
-                request.getModel(), request.getMessage());
+        log.info("Received streaming chat request - model: {}, message: {}, conversationId: {}",
+                request.getModel(), request.getMessage(), request.getConversationId());
 
         String model = request.getModel() != null ? request.getModel() : "deepseek";
-        return llmService.streamChat(model, request.getMessage())
+        return llmService.streamChat(model, request.getMessage(), request.getConversationId())
                 .map(content -> {
                     log.warn("Streaming content: {}", content);
                     return content;

@@ -2,10 +2,12 @@ package com.wifiin.newsay.ai.llm.service.impl;
 
 import com.wifiin.newsay.ai.llm.enums.LlmModel;
 import com.wifiin.newsay.ai.llm.model.StreamChunk;
+import com.wifiin.newsay.ai.llm.service.ChatMemoryService;
 import com.wifiin.newsay.ai.llm.service.LlmService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -76,6 +78,9 @@ public class LlmServiceImpl implements LlmService {
     @Qualifier("llmRouter")
     private Map<String, ChatClient> chatClientRouter;
 
+    @Autowired
+    private ChatMemoryService chatMemoryService;
+
 
     @Override
     public Flux<String> streamChat(String model, String message) {
@@ -91,7 +96,21 @@ public class LlmServiceImpl implements LlmService {
 
     @Override
     public Flux<String> streamChat(String message) {
-        return streamChat("deepseek", message);
+        return streamChat("deepseek", message, null);
+    }
+
+    @Override
+    public Flux<String> streamChat(String model, String message, String conversationId) {
+        if (conversationId == null || conversationId.isEmpty()) {
+            return streamChat(model, message);
+        }
+
+        LlmModel llmModel = LlmModel.fromValue(model);
+        String finalApiKey = getApiKeyForModel(llmModel);
+        String finalBaseUrl = getBaseUrlForModel(llmModel);
+        String modelName = getModelNameForModel(llmModel);
+
+        return streamChatWithMemory(message, conversationId, finalApiKey, finalBaseUrl, modelName);
     }
 
     private Flux<String> streamChat(String message, String apiKey, String baseUrl, String model) {
@@ -121,6 +140,48 @@ public class LlmServiceImpl implements LlmService {
                             },
                             sink::error,
                             sink::complete
+                    );
+        });
+    }
+
+    private Flux<String> streamChatWithMemory(String message, String conversationId, String apiKey, String baseUrl, String model) {
+        OpenAiApi tempApi = OpenAiApi.builder()
+                .apiKey(apiKey)
+                .baseUrl(baseUrl)
+                .build();
+
+        OpenAiChatModel tempChatModel = OpenAiChatModel.builder()
+                .openAiApi(tempApi)
+                .defaultOptions(OpenAiChatOptions.builder()
+                        .model(model)
+                        .temperature(0.7)
+                        .build())
+                .build();
+
+        ChatClient tempChatClient = ChatClient.builder(tempChatModel).build();
+
+        List<Message> history = chatMemoryService.getHistory(conversationId);
+
+        StringBuilder fullResponse = new StringBuilder();
+
+        chatMemoryService.addUserMessage(conversationId, message);
+
+        return Flux.create(sink -> {
+            tempChatClient.prompt()
+                    .messages(history.toArray(new Message[0]))
+                    .user(message)
+                    .stream()
+                    .content()
+                    .subscribe(
+                            response -> {
+                                fullResponse.append(response);
+                                sink.next(response);
+                            },
+                            sink::error,
+                            () -> {
+                                chatMemoryService.addAssistantMessage(conversationId, fullResponse.toString());
+                                sink.complete();
+                            }
                     );
         });
     }

@@ -15,6 +15,11 @@ public interface LlmService {
     Flux<String> streamChat(String model, String message);
 
     /**
+     * Stream chat with specified model and conversationId for multi-turn conversation
+     */
+    Flux<String> streamChat(String model, String message, String conversationId);
+
+    /**
      * Stream chat with default model
      */
     Flux<String> streamChat(String message);
