@@ -6,6 +6,9 @@ import com.wifiin.newsay.ai.llm.service.LlmService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -76,25 +79,32 @@ public class LlmServiceImpl implements LlmService {
     @Qualifier("llmRouter")
     private Map<String, ChatClient> chatClientRouter;
 
+    @Autowired
+    private ChatMemory chatMemory;
+
 
     @Override
-    public Flux<String> streamChat(String model, String message) {
+    public Flux<String> streamChat(String model, String message, String conversationId) {
         LlmModel llmModel = LlmModel.fromValue(model);
 
         String finalApiKey = getApiKeyForModel(llmModel);
         String finalBaseUrl = getBaseUrlForModel(llmModel);
         String modelName = getModelNameForModel(llmModel);
 
+        return streamChatInternal(message, finalApiKey, finalBaseUrl, modelName, conversationId);
+    }
 
-        return streamChat(message, finalApiKey, finalBaseUrl, modelName);
+    @Override
+    public Flux<String> streamChat(String model, String message) {
+        return streamChat(model, message, null);
     }
 
     @Override
     public Flux<String> streamChat(String message) {
-        return streamChat("deepseek", message);
+        return streamChat("deepseek", message, null);
     }
 
-    private Flux<String> streamChat(String message, String apiKey, String baseUrl, String model) {
+    private Flux<String> streamChatInternal(String message, String apiKey, String baseUrl, String model, String conversationId) {
         OpenAiApi tempApi = OpenAiApi.builder()
                 .apiKey(apiKey)
                 .baseUrl(baseUrl)
@@ -108,7 +118,10 @@ public class LlmServiceImpl implements LlmService {
                         .build())
                 .build();
 
-        Prompt prompt = new Prompt(new UserMessage(message));
+        Prompt prompt = buildPrompt(message, conversationId);
+
+        // 用于收集流式响应内容
+        StringBuilder responseContent = new StringBuilder();
 
         return Flux.create(sink -> {
             tempChatModel.stream(prompt)
@@ -116,33 +129,48 @@ public class LlmServiceImpl implements LlmService {
                             response -> {
                                 String content = extractContent(response);
                                 if (content != null && !content.isEmpty()) {
+                                    responseContent.append(content);
                                     sink.next(content);
                                 }
                             },
-                            sink::error,
-                            sink::complete
+                            error -> {
+                                sink.error(error);
+                            },
+                            () -> {
+                                // 流完成时保存对话历史
+                                if (conversationId != null && responseContent.length() > 0) {
+                                    chatMemory.add(conversationId, new UserMessage(message));
+                                    chatMemory.add(conversationId, new AssistantMessage(responseContent.toString()));
+                                }
+                                sink.complete();
+                            }
                     );
         });
     }
 
 
     @Override
-    public String chat(String model, String message) {
+    public String chat(String model, String message, String conversationId) {
         LlmModel llmModel = LlmModel.fromValue(model);
 
         String finalApiKey = getApiKeyForModel(llmModel);
         String finalBaseUrl = getBaseUrlForModel(llmModel);
         String modelName = getModelNameForModel(llmModel);
-        return chat(message, finalApiKey, finalBaseUrl, modelName);
+        return chatInternal(message, finalApiKey, finalBaseUrl, modelName, conversationId);
+    }
+
+    @Override
+    public String chat(String model, String message) {
+        return chat(model, message, null);
     }
 
     @Override
     public String chat(String message) {
-        return chat("deepseek", message);
+        return chat("deepseek", message, null);
     }
 
 
-    private String chat(String message, String apiKey, String baseUrl, String model) {
+    private String chatInternal(String message, String apiKey, String baseUrl, String model, String conversationId) {
         OpenAiApi tempApi = OpenAiApi.builder()
                 .apiKey(apiKey)
                 .baseUrl(baseUrl)
@@ -156,9 +184,34 @@ public class LlmServiceImpl implements LlmService {
                         .build())
                 .build();
 
-        Prompt prompt = new Prompt(new UserMessage(message));
+        Prompt prompt = buildPrompt(message, conversationId);
         ChatResponse response = tempChatModel.call(prompt);
+
+        // 保存 Assistant 的回复到 ChatMemory
+        if (conversationId != null) {
+            String content = extractContent(response);
+            if (content != null && !content.isEmpty()) {
+                chatMemory.add(conversationId, new UserMessage(message));
+                chatMemory.add(conversationId, new AssistantMessage(content));
+            }
+        }
+
         return extractContent(response);
+    }
+
+    private Prompt buildPrompt(String message, String conversationId) {
+        if (conversationId == null || conversationId.isEmpty()) {
+            return new Prompt(new UserMessage(message));
+        }
+
+        // 获取对话历史
+        List<Message> history = chatMemory.get(conversationId);
+
+        // 构建消息列表
+        List<Message> messages = new ArrayList<>(history);
+        messages.add(new UserMessage(message));
+
+        return new Prompt(messages);
     }
 
     private String getApiKeyForModel(LlmModel model) {
