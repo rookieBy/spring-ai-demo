@@ -1,0 +1,22 @@
+# Build output
+target/
+/target
+
+# Local launcher jars (already in git history, but large)
+current/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
