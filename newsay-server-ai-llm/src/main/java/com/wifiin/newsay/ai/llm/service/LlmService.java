@@ -20,6 +20,11 @@ public interface LlmService {
     Flux<String> streamChat(String model, String message, String conversationId);
 
     /**
+     * Stream chat with search augmentation - uses MCP to search, then answers with specified model
+     */
+    Flux<String> streamChatWithSearch(String model, String message, String conversationId);
+
+    /**
      * Stream chat with default model
      */
     Flux<String> streamChat(String message);
