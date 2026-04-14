@@ -117,6 +117,11 @@ public class LlmServiceImpl implements LlmService {
             }
         }
 
+        // 检测是否需要搜索增强：包含搜索关键词且非 minimax 模型
+        if (isSearchQuery(message)) {
+            return streamChatWithSearch(model, message, conversationId);
+        }
+
         if (conversationId == null || conversationId.isEmpty()) {
             return streamChat(model, message);
         }
@@ -258,6 +263,47 @@ public class LlmServiceImpl implements LlmService {
         });
     }
 
+    @Override
+    public Flux<String> streamChatWithSearch(String model, String message, String conversationId) {
+        // 1. 先用 minimax MCP 搜索获取实时信息（阻塞调用）
+        String searchResults = mcpSearch(message);
+
+        // 2. 构建增强提示词：搜索结果 + 用户问题
+        String enhancedPrompt = buildEnhancedPrompt(message, searchResults);
+
+        // 3. 用用户选择的模型流式回答
+        LlmModel llmModel = LlmModel.fromValue(model);
+        String finalApiKey = getApiKeyForModel(llmModel);
+        String finalBaseUrl = getBaseUrlForModel(llmModel);
+        String modelName = getModelNameForModel(llmModel);
+
+        return streamChatWithMemory(enhancedPrompt, conversationId, finalApiKey, finalBaseUrl, modelName);
+    }
+
+    private String buildEnhancedPrompt(String question, String searchResults) {
+        return "你是一个helpful的AI助手。以下是联网搜索获取的最新信息：\n\n" +
+               "【搜索结果】\n" + searchResults + "\n\n" +
+               "【用户问题】" + question + "\n\n" +
+               "请根据以上搜索结果，回答用户的问题。如果搜索结果不相关，请基于你的知识回答。";
+    }
+
+    private boolean isSearchQuery(String message) {
+        if (message == null || message.isEmpty()) {
+            return false;
+        }
+        String lowerMessage = message.toLowerCase();
+        return lowerMessage.contains("搜索") ||
+               lowerMessage.contains("最新") ||
+               lowerMessage.contains("今天") ||
+               lowerMessage.contains("昨日") ||
+               lowerMessage.contains("新闻") ||
+               lowerMessage.contains("最近") ||
+               lowerMessage.contains("当前") ||
+               lowerMessage.contains("实时") ||
+               lowerMessage.contains("行情") ||
+               lowerMessage.contains("股价") ||
+               lowerMessage.contains("天气");
+    }
 
     @Override
     public String chat(String model, String message) {
