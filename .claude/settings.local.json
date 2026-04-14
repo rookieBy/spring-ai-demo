@@ -26,7 +26,8 @@
       "Bash(mvn test:*)",
       "Bash(claude:*)",
       "Bash(git pull:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }

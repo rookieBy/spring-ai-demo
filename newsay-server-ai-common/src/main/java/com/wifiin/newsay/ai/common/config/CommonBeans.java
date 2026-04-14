@@ -138,6 +138,9 @@ public class CommonBeans {
                 .setAddress("redis://" + redisHost + ":" + redisPort)
                 .setConnectionPoolSize(10)
                 .setConnectionMinimumIdleSize(5);
+        if (redisPassword != null && !redisPassword.isEmpty()) {
+            config.useSingleServer().setPassword(redisPassword);
+        }
         return Redisson.create(config);
     }
 
