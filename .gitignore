@@ -7,6 +7,7 @@ current/
 
 # IDE
 .idea/
+.claude/
 *.iml
 .vscode/
 .project
