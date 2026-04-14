@@ -101,6 +101,11 @@ public class LlmServiceImpl implements LlmService {
 
     @Override
     public Flux<String> streamChat(String model, String message, String conversationId) {
+        // 检测是否为搜索查询，如果是则路由到 MCP
+        if (isSearchQuery(message)) {
+            return streamChatWithMcp(message, conversationId);
+        }
+
         if (conversationId == null || conversationId.isEmpty()) {
             return streamChat(model, message);
         }
@@ -111,6 +116,71 @@ public class LlmServiceImpl implements LlmService {
         String modelName = getModelNameForModel(llmModel);
 
         return streamChatWithMemory(message, conversationId, finalApiKey, finalBaseUrl, modelName);
+    }
+
+    /**
+     * 检测消息是否为搜索查询
+     */
+    private boolean isSearchQuery(String message) {
+        if (message == null || message.isEmpty()) {
+            return false;
+        }
+        String lowerMessage = message.toLowerCase();
+        return lowerMessage.contains("搜索") ||
+                lowerMessage.contains("查询") ||
+                lowerMessage.contains("最新") ||
+                lowerMessage.contains("今天") ||
+                lowerMessage.contains("昨天") ||
+                lowerMessage.contains("新闻") ||
+                lowerMessage.contains("天气") ||
+                lowerMessage.contains("股价") ||
+                lowerMessage.contains("股票") ||
+                lowerMessage.contains("实时") ||
+                lowerMessage.contains("现在") ||
+                lowerMessage.contains("最新") ||
+                lowerMessage.contains("联网") ||
+                lowerMessage.contains("网上") ||
+                lowerMessage.contains("网上查") ||
+                lowerMessage.contains("搜索一下");
+    }
+
+    /**
+     * 使用 MCP 流式搜索
+     */
+    private Flux<String> streamChatWithMcp(String message, String conversationId) {
+        ChatClient chatClient = chatClientRouter.get("minimax");
+        String searchMessage = "请使用联网搜索工具搜索以下信息：" + message;
+
+        if (conversationId != null && !conversationId.isEmpty()) {
+            List<Message> history = chatMemoryService.getHistory(conversationId);
+            chatMemoryService.addUserMessage(conversationId, message);
+
+            StringBuilder fullResponse = new StringBuilder();
+
+            return Flux.create(sink -> {
+                chatClient.prompt()
+                        .messages(history.toArray(new Message[0]))
+                        .user(searchMessage)
+                        .stream()
+                        .content()
+                        .subscribe(
+                                response -> {
+                                    fullResponse.append(response);
+                                    sink.next(response);
+                                },
+                                sink::error,
+                                () -> {
+                                    chatMemoryService.addAssistantMessage(conversationId, fullResponse.toString());
+                                    sink.complete();
+                                }
+                        );
+            });
+        } else {
+            return chatClient.prompt()
+                    .user(searchMessage)
+                    .stream()
+                    .content();
+        }
     }
 
     private Flux<String> streamChat(String message, String apiKey, String baseUrl, String model) {
