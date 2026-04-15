@@ -102,24 +102,60 @@ public class LlmServiceImpl implements LlmService {
 
     @Override
     public Flux<String> streamChat(String model, String message, String conversationId) {
-        // Minimax 模型有 MCP 工具支持，让 LLM 自己决定是否调用搜索工具
+        return streamChat(model, message, conversationId, null);
+    }
+
+    @Override
+    public Flux<String> streamChat(String model, String message, String conversationId, Boolean enableSearch) {
+        // 1. 如果 enableSearch 明确为 true，直接使用搜索增强
+        if (Boolean.TRUE.equals(enableSearch)) {
+            log.info("Search explicitly enabled for message: {}", message);
+            return streamChatWithSearch(model, message, conversationId);
+        }
+
+        // 2. 如果 enableSearch 明确为 false，跳过搜索和语义分析
+        if (Boolean.FALSE.equals(enableSearch)) {
+            log.info("Search explicitly disabled, using normal chat");
+            return streamChatNoSearch(model, message, conversationId);
+        }
+
+        // 3. enableSearch 为 null，执行自动语义分析检测
+        return streamChatWithAutoDetection(model, message, conversationId);
+    }
+
+    /**
+     * 自动检测模式：语义分析决定是否搜索
+     */
+    private Flux<String> streamChatWithAutoDetection(String model, String message, String conversationId) {
+        // Minimax 模型有 MCP 工具支持，让 LLM 自己决定
         if ("minimax".equalsIgnoreCase(model)) {
             return streamChatWithMinimax(message, conversationId);
         }
 
-        // 非 minimax 模型，检查对话历史是否在使用 MCP
+        // 检查对话历史是否需要继续使用 MCP
         if (conversationId != null && !conversationId.isEmpty()) {
             List<Message> history = chatMemoryService.getHistory(conversationId);
-            boolean shouldContinueWithMcp = shouldContinueWithMcp(history);
-
-            if (shouldContinueWithMcp) {
+            if (shouldContinueWithMcp(history)) {
                 return streamChatWithMinimax(message, conversationId);
             }
         }
 
-        // 检测是否需要搜索增强：包含搜索关键词且非 minimax 模型
-        if (isSearchQuery(message)) {
+        // 使用 LLM 语义分析判断是否需要联网搜索
+        if (needsSearchBySemanticAnalysis(message)) {
+            log.info("Semantic analysis triggered search for message: {}", message);
             return streamChatWithSearch(model, message, conversationId);
+        }
+
+        // 普通对话
+        return streamChatNoSearch(model, message, conversationId);
+    }
+
+    /**
+     * 不使用搜索的普通对话
+     */
+    private Flux<String> streamChatNoSearch(String model, String message, String conversationId) {
+        if ("minimax".equalsIgnoreCase(model)) {
+            return streamChatWithMinimax(message, conversationId);
         }
 
         if (conversationId == null || conversationId.isEmpty()) {
@@ -132,6 +168,14 @@ public class LlmServiceImpl implements LlmService {
         String modelName = getModelNameForModel(llmModel);
 
         return streamChatWithMemory(message, conversationId, finalApiKey, finalBaseUrl, modelName);
+    }
+
+    /**
+     * 使用 LLM 语义分析判断是否需要联网搜索
+     */
+    private boolean needsSearchBySemanticAnalysis(String message) {
+        // TODO: 实现 LLM 语义分析，当前使用关键词匹配作为临时方案
+        return isSearchQuery(message);
     }
 
     /**
