@@ -70,22 +70,37 @@ public class LLMConfig {
 
     @Bean("deepseekChatClient")
     public ChatClient deepseekChatClient() {
-        return createClient("deepseek", null);
+        LLMProperties.ProviderConfig cfg = properties.getProvider("deepseek");
+        return createClient("deepseek", cfg.isMcp() ? getMcpProvider("deepseek") : null);
     }
 
     @Bean("qwenChatClient")
     public ChatClient qwenChatClient() {
-        return createClient("qwen", null);
+        LLMProperties.ProviderConfig cfg = properties.getProvider("qwen");
+        return createClient("qwen", cfg.isMcp() ? getMcpProvider("qwen") : null);
     }
 
     @Bean("glmChatClient")
     public ChatClient glmChatClient() {
-        return createClient("glm", null);
+        LLMProperties.ProviderConfig cfg = properties.getProvider("glm");
+        return createClient("glm", cfg.isMcp() ? getMcpProvider("glm") : null);
     }
 
     @Bean("minimaxChatClient")
     public ChatClient minimaxChatClient(@Qualifier("minimaxMcp") ToolCallbackProvider provider) {
-        return createClient("minimax", provider);
+        LLMProperties.ProviderConfig cfg = properties.getProvider("minimax");
+        return createClient("minimax", cfg.isMcp() ? provider : null);
+    }
+
+    /**
+     * 根据 provider name 获取对应的 MCP ToolCallbackProvider
+     * 目前只有 minimax 有自定义 MCP 客户端配置，其他厂商使用原生 tool calling
+     */
+    private ToolCallbackProvider getMcpProvider(String providerName) {
+        return switch (providerName) {
+            case "minimax" -> minimaxTools(null); // 复用 minimaxMcp bean
+            default -> null;
+        };
     }
 
     @Bean(destroyMethod = "close")

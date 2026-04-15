@@ -58,6 +58,7 @@ public class LLMProperties {
         private String baseUrl;
         private String model;
         private Double temperature = 0.7;
+        private boolean mcp = false; // 默认不支持MCP
 
         public String getApiKey() {
             return apiKey;
@@ -89,6 +90,14 @@ public class LLMProperties {
 
         public void setTemperature(Double temperature) {
             this.temperature = temperature;
+        }
+
+        public boolean isMcp() {
+            return mcp;
+        }
+
+        public void setMcp(boolean mcp) {
+            this.mcp = mcp;
         }
 
         public boolean isValid() {

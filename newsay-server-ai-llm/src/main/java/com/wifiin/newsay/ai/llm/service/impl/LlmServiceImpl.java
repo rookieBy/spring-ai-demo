@@ -3,6 +3,7 @@ package com.wifiin.newsay.ai.llm.service.impl;
 import com.wifiin.newsay.ai.llm.enums.LlmModel;
 import com.wifiin.newsay.ai.llm.model.StreamChunk;
 import com.wifiin.newsay.ai.llm.service.ChatMemoryService;
+import com.wifiin.newsay.ai.llm.service.LLMProperties;
 import com.wifiin.newsay.ai.llm.service.LlmService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,6 +83,9 @@ public class LlmServiceImpl implements LlmService {
     @Autowired
     private ChatMemoryService chatMemoryService;
 
+    @Autowired
+    private LLMProperties llmProperties;
+
 
     @Override
     public Flux<String> streamChat(String model, String message) {
@@ -124,25 +128,24 @@ public class LlmServiceImpl implements LlmService {
     }
 
     /**
-     * 自动检测模式：语义分析决定是否搜索
+     * 自动检测模式：根据模型是否支持MCP来决定路由
+     *
+     * - 支持MCP的模型：让LLM自己决定是否调用搜索工具
+     * - 不支持MCP的模型：用关键词匹配判断是否需要搜索，如果需要则调用MiniMax搜索
      */
     private Flux<String> streamChatWithAutoDetection(String model, String message, String conversationId) {
-        // Minimax 模型有 MCP 工具支持，让 LLM 自己决定
-        if (LlmModel.MINIMAX.getValue().equalsIgnoreCase(model)) {
+        // 检查当前模型是否支持MCP
+        LLMProperties.ProviderConfig config = llmProperties.getProvider(model);
+        boolean supportMcp = config != null && config.isMcp();
+
+        if (supportMcp) {
+            // 模型支持MCP，让LLM自己决定是否调用搜索工具
             return streamChatWithMinimax(message, conversationId);
         }
 
-        // 检查对话历史是否需要继续使用 MCP
-        if (conversationId != null && !conversationId.isEmpty()) {
-            List<Message> history = chatMemoryService.getHistory(conversationId);
-            if (shouldContinueWithMcp(history)) {
-                return streamChatWithMinimax(message, conversationId);
-            }
-        }
-
-        // 使用 LLM 语义分析判断是否需要联网搜索
-        if (needsSearchBySemanticAnalysis(message)) {
-            log.info("Semantic analysis triggered search for message: {}", message);
+        // 模型不支持MCP，用关键词匹配判断是否需要搜索
+        if (isSearchQuery(message)) {
+            log.info("Keyword detected search need for message: {}", message);
             return streamChatWithSearch(model, message, conversationId);
         }
 
@@ -168,45 +171,6 @@ public class LlmServiceImpl implements LlmService {
         String modelName = getModelNameForModel(llmModel);
 
         return streamChatWithMemory(message, conversationId, finalApiKey, finalBaseUrl, modelName);
-    }
-
-    /**
-     * 使用 LLM 语义分析判断是否需要联网搜索
-     */
-    private boolean needsSearchBySemanticAnalysis(String message) {
-        // TODO: 实现 LLM 语义分析，当前使用关键词匹配作为临时方案
-        return isSearchQuery(message);
-    }
-
-    /**
-     * 判断是否应该继续使用 MCP（基于对话历史中是否有工具调用）
-     *
-     * 当前实现：检查历史中是否包含助手消息且最后一条助手消息包含 MCP 工具调用标识。
-     * 这是一个简化实现，实际生产环境可能需要更精确的逻辑来判断是否应该继续使用 MCP。
-     *
-     * @param history 对话历史
-     * @return true 如果应该继续使用 MCP，false 否则
-     */
-    private boolean shouldContinueWithMcp(List<Message> history) {
-        if (history == null || history.isEmpty()) {
-            return false;
-        }
-        // 检查历史中是否有 MCP 工具调用
-        // 简化为：检查是否有助手消息（说明之前已经有响应，可能包含工具调用）
-        // 实际实现应该解析 AssistantMessage 的 toolCalls 或 similar 字段
-        for (int i = history.size() - 1; i >= 0; i--) {
-            Message msg = history.get(i);
-            if (msg instanceof AssistantMessage) {
-                // 助手消息可能包含工具调用，这里简化判断
-                // 实际应该检查 toolCalls 字段
-                return true;
-            }
-            if (msg instanceof UserMessage) {
-                // 遇到用户消息就停止检查（更早的对话与当前相关性较低）
-                break;
-            }
-        }
-        return false;
     }
 
     /**
