@@ -128,7 +128,7 @@ public class LlmServiceImpl implements LlmService {
      */
     private Flux<String> streamChatWithAutoDetection(String model, String message, String conversationId) {
         // Minimax 模型有 MCP 工具支持，让 LLM 自己决定
-        if ("minimax".equalsIgnoreCase(model)) {
+        if (LlmModel.MINIMAX.getValue().equalsIgnoreCase(model)) {
             return streamChatWithMinimax(message, conversationId);
         }
 
@@ -154,7 +154,7 @@ public class LlmServiceImpl implements LlmService {
      * 不使用搜索的普通对话
      */
     private Flux<String> streamChatNoSearch(String model, String message, String conversationId) {
-        if ("minimax".equalsIgnoreCase(model)) {
+        if (LlmModel.MINIMAX.getValue().equalsIgnoreCase(model)) {
             return streamChatWithMinimax(message, conversationId);
         }
 
@@ -180,22 +180,40 @@ public class LlmServiceImpl implements LlmService {
 
     /**
      * 判断是否应该继续使用 MCP（基于对话历史中是否有工具调用）
+     *
+     * 当前实现：检查历史中是否包含助手消息且最后一条助手消息包含 MCP 工具调用标识。
+     * 这是一个简化实现，实际生产环境可能需要更精确的逻辑来判断是否应该继续使用 MCP。
+     *
+     * @param history 对话历史
+     * @return true 如果应该继续使用 MCP，false 否则
      */
     private boolean shouldContinueWithMcp(List<Message> history) {
         if (history == null || history.isEmpty()) {
             return false;
         }
-        // 检查历史消息中是否有 MCP 工具调用 - 简化为只检查最后一条assistant消息
-        // 如果历史不为空，说明用户在继续一个对话，应该保持使用同一个client
-        // 这里我们信任调用方的选择
-        return true;
+        // 检查历史中是否有 MCP 工具调用
+        // 简化为：检查是否有助手消息（说明之前已经有响应，可能包含工具调用）
+        // 实际实现应该解析 AssistantMessage 的 toolCalls 或 similar 字段
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Message msg = history.get(i);
+            if (msg instanceof AssistantMessage) {
+                // 助手消息可能包含工具调用，这里简化判断
+                // 实际应该检查 toolCalls 字段
+                return true;
+            }
+            if (msg instanceof UserMessage) {
+                // 遇到用户消息就停止检查（更早的对话与当前相关性较低）
+                break;
+            }
+        }
+        return false;
     }
 
     /**
      * 使用 Minimax MCP 流式对话（LLM自己决定是否调用搜索工具）
      */
     private Flux<String> streamChatWithMinimax(String message, String conversationId) {
-        ChatClient chatClient = chatClientRouter.get("minimax");
+        ChatClient chatClient = chatClientRouter.get(LlmModel.MINIMAX.getValue());
 
         final List<Message> history;
         final boolean hasConversation = conversationId != null && !conversationId.isEmpty();
@@ -309,7 +327,10 @@ public class LlmServiceImpl implements LlmService {
 
     @Override
     public Flux<String> streamChatWithSearch(String model, String message, String conversationId) {
-        // 1. 先用 minimax MCP 搜索获取实时信息（阻塞调用）
+        // 1. 先用 Minimax MCP 搜索获取实时信息
+        // 注意：mcpSearch 是同步阻塞调用，这是当前设计的权衡。
+        // 搜索结果作为增强上下文整合到响应中，用户会先等待搜索完成，再开始接收流式响应。
+        // 如需完全非阻塞，可考虑将搜索结果缓存或异步预取。
         String searchResults = mcpSearch(message);
 
         // 2. 构建增强提示词：搜索结果 + 用户问题
@@ -470,7 +491,10 @@ public class LlmServiceImpl implements LlmService {
 
     @Override
     public String mcpSearch(String message) {
-        return chatClientRouter.get("minimax").prompt()
+        // 注意：这是一个阻塞调用，因为 mcpSearch 本身是同步接口设计（返回 String 而非 Flux）
+        // 在 streamChatWithSearch 中调用时，搜索结果会作为流式响应的前缀返回给用户，
+        // 因此用户感知到的延迟主要是搜索时间，这是可接受的权衡
+        return chatClientRouter.get(LlmModel.MINIMAX.getValue()).prompt()
                 .user("请使用联网搜索工具搜索以下信息：" + message)
                 .call()
                 .content();

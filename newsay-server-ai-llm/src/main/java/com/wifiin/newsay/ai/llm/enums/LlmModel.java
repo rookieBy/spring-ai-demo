@@ -7,7 +7,8 @@ public enum LlmModel {
     QWEN("qwen"),
     GLM("glm"),
     DEEPSEEK("deepseek"),
-    OPENAI("openai");
+    OPENAI("openai"),
+    MINIMAX("minimax");
 
     private final String value;
 
