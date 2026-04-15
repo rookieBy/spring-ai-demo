@@ -1,6 +1,7 @@
 package com.wifiin.newsay.ai.llm.service.impl;
 
 import com.wifiin.newsay.ai.llm.service.ChatMemoryService;
+import com.wifiin.newsay.ai.llm.service.ChatMemoryPersistence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -10,9 +11,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Redis-based Chat Memory Implementation with Sliding Window
@@ -25,12 +30,20 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
 
     private final StringRedisTemplate redisTemplate;
     private final int slidingWindowSize;
+    private final int ttlSeconds;
+    private ChatMemoryPersistence chatMemoryPersistence;
 
     public RedisChatMemoryServiceImpl(
             StringRedisTemplate redisTemplate,
-            @Value("${spring.ai.chat.memory.sliding-window-size:20}") int slidingWindowSize) {
+            @Value("${spring.ai.chat.memory.sliding-window-size:20}") int slidingWindowSize,
+            @Value("${spring.ai.chat.memory.ttl:3600}") int ttlSeconds) {
         this.redisTemplate = redisTemplate;
         this.slidingWindowSize = slidingWindowSize;
+        this.ttlSeconds = ttlSeconds;
+    }
+
+    public void setChatMemoryPersistence(ChatMemoryPersistence persistence) {
+        this.chatMemoryPersistence = persistence;
     }
 
     @Override
@@ -39,8 +52,27 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
         List<String> messages = redisTemplate.opsForList().range(key, 0, -1);
 
         if (messages == null || messages.isEmpty()) {
+            // Redis 未命中，尝试从 MySQL 加载
+            if (chatMemoryPersistence != null) {
+                Optional<List<Message>> dbMessages = chatMemoryPersistence.loadFromDatabase(conversationId);
+                if (dbMessages.isPresent()) {
+                    List<Message> loaded = dbMessages.get();
+                    // 回填 Redis
+                    for (Message msg : loaded) {
+                        if (msg instanceof UserMessage) {
+                            addUserMessage(conversationId, msg.getContent());
+                        } else if (msg instanceof AssistantMessage) {
+                            addAssistantMessage(conversationId, msg.getContent());
+                        }
+                    }
+                    return loaded;
+                }
+            }
             return Collections.emptyList();
         }
+
+        // 刷新 TTL
+        redisTemplate.expire(key, Duration.ofSeconds(ttlSeconds));
 
         List<Message> result = new ArrayList<>();
         for (String msgJson : messages) {
@@ -56,6 +88,7 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
 
         redisTemplate.opsForList().rightPush(key, msgJson);
         trimToWindowSize(key);
+        redisTemplate.expire(key, Duration.ofSeconds(ttlSeconds));  // 刷新 TTL
     }
 
     @Override
@@ -65,12 +98,21 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
 
         redisTemplate.opsForList().rightPush(key, msgJson);
         trimToWindowSize(key);
+        redisTemplate.expire(key, Duration.ofSeconds(ttlSeconds));  // 刷新 TTL
     }
 
     @Override
     public void clear(String conversationId) {
         String key = KEY_PREFIX + conversationId;
         redisTemplate.delete(key);
+    }
+
+    public Set<String> getAllConversationIds() {
+        Set<String> keys = redisTemplate.keys(KEY_PREFIX + "*");
+        if (keys == null) return Collections.emptySet();
+        return keys.stream()
+                .map(k -> k.substring(KEY_PREFIX.length()))
+                .collect(Collectors.toSet());
     }
 
     private void trimToWindowSize(String key) {
