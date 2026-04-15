@@ -21,3 +21,9 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Maven
+.mvn/
+
+# Windows/Maven local repository
+D:/
