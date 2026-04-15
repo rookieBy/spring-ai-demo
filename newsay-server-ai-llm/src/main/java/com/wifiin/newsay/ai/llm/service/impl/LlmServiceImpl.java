@@ -486,7 +486,13 @@ public class LlmServiceImpl implements LlmService {
 
     private Flux<ServerSentEvent<StreamChunk>> smartStreamWithSearch(String model, String message) {
         // 1. MCP 搜索
-        String searchResults = mcpSearch(message);
+        String searchResults;
+        try {
+            searchResults = mcpSearch(message);
+        } catch (Exception e) {
+            log.error("Search failed, falling back to default stream: {}", e.getMessage());
+            return smartStreamDefault(model, message);
+        }
         String enhancedPrompt = buildEnhancedPrompt(message, searchResults);
 
         // 2. 使用 deepseek 流式回答
