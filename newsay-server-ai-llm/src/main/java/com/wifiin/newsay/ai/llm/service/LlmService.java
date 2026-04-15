@@ -20,6 +20,15 @@ public interface LlmService {
     Flux<String> streamChat(String model, String message, String conversationId);
 
     /**
+     * Stream chat with specified model and conversationId, with explicit search control
+     * @param model 模型名称
+     * @param message 用户消息
+     * @param conversationId 对话 ID
+     * @param enableSearch true=强制启用搜索, false=禁用搜索, null=自动检测
+     */
+    Flux<String> streamChat(String model, String message, String conversationId, Boolean enableSearch);
+
+    /**
      * Stream chat with search augmentation - uses MCP to search, then answers with specified model
      */
     Flux<String> streamChatWithSearch(String model, String message, String conversationId);
