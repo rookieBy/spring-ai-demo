@@ -11,14 +11,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -44,30 +38,6 @@ public class LlmServiceImpl implements LlmService {
 
     private static final Logger log = LoggerFactory.getLogger(LlmServiceImpl.class);
 
-    @Value("${spring.ai.openai.api-key}")
-    private String openAiApiKey;
-
-    @Value("${spring.ai.openai.base-url}")
-    private String openAiBaseUrl;
-
-    @Value("${spring.ai.deepseek.api-key}")
-    private String deepSeekApiKey;
-
-    @Value("${spring.ai.deepseek.base-url:https://api.deepseek.com}")
-    private String deepSeekBaseUrl;
-
-    @Value("${spring.ai.alibaba.api-key:}")
-    private String glmApiKey;
-
-    @Value("${spring.ai.alibaba.base-url:https://open.bigmodel.cn/api/paas/v4}")
-    private String glmBaseUrl;
-
-    @Value("${spring.ai.dashscope.api-key:}")
-    private String dashScopeApiKey;
-
-    @Value("${spring.ai.dashscope.base-url:https://dashscope.aliyuncs.com/compatible-mode/v1}")
-    private String dashScopeBaseUrl;
-
 
     // Markdown 格式标记
     private static final Pattern CODE_FENCE = Pattern.compile("```(\\w*)?");
@@ -89,14 +59,11 @@ public class LlmServiceImpl implements LlmService {
 
     @Override
     public Flux<String> streamChat(String model, String message) {
-        LlmModel llmModel = LlmModel.fromValue(model);
-
-        String finalApiKey = getApiKeyForModel(llmModel);
-        String finalBaseUrl = getBaseUrlForModel(llmModel);
-        String modelName = getModelNameForModel(llmModel);
-
-
-        return streamChat(message, finalApiKey, finalBaseUrl, modelName);
+        ChatClient chatClient = chatClientRouter.get(model);
+        return chatClient.prompt()
+                .user(message)
+                .stream()
+                .content();
     }
 
     @Override
@@ -165,12 +132,34 @@ public class LlmServiceImpl implements LlmService {
             return streamChat(model, message);
         }
 
-        LlmModel llmModel = LlmModel.fromValue(model);
-        String finalApiKey = getApiKeyForModel(llmModel);
-        String finalBaseUrl = getBaseUrlForModel(llmModel);
-        String modelName = getModelNameForModel(llmModel);
+        // 使用 chatClientRouter 获取已配置的 ChatClient
+        ChatClient chatClient = chatClientRouter.get(model);
+        List<Message> history = chatMemoryService.getHistory(conversationId);
+        chatMemoryService.addUserMessage(conversationId, message);
 
-        return streamChatWithMemory(message, conversationId, finalApiKey, finalBaseUrl, modelName);
+        StringBuilder fullResponse = new StringBuilder();
+
+        return Flux.create(sink -> {
+            var promptBuilder = chatClient.prompt();
+            if (history != null && !history.isEmpty()) {
+                promptBuilder.messages(history.toArray(new Message[0]));
+            }
+            promptBuilder.user(message);
+
+            promptBuilder.stream()
+                    .content()
+                    .subscribe(
+                            response -> {
+                                fullResponse.append(response);
+                                sink.next(response);
+                            },
+                            sink::error,
+                            () -> {
+                                chatMemoryService.addAssistantMessage(conversationId, fullResponse.toString());
+                                sink.complete();
+                            }
+                    );
+        });
     }
 
     /**
@@ -216,64 +205,34 @@ public class LlmServiceImpl implements LlmService {
         });
     }
 
-    private Flux<String> streamChat(String message, String apiKey, String baseUrl, String model) {
-        OpenAiApi tempApi = OpenAiApi.builder()
-                .apiKey(apiKey)
-                .baseUrl(baseUrl)
-                .build();
+    @Override
+    public Flux<String> streamChatWithSearch(String model, String message, String conversationId) {
+        // 1. 先用 Minimax MCP 搜索获取实时信息
+        String searchResults = mcpSearch(message);
 
-        OpenAiChatModel tempChatModel = OpenAiChatModel.builder()
-                .openAiApi(tempApi)
-                .defaultOptions(OpenAiChatOptions.builder()
-                        .model(model)
-                        .temperature(0.7)
-                        .build())
-                .build();
+        // 2. 构建增强提示词：搜索结果 + 用户问题
+        String enhancedPrompt = buildEnhancedPrompt(message, searchResults);
 
-        Prompt prompt = new Prompt(new UserMessage(message));
+        // 3. 使用 chatClientRouter 获取已配置的 ChatClient
+        ChatClient chatClient = chatClientRouter.get(model);
+        List<Message> history = null;
+        boolean hasConversation = conversationId != null && !conversationId.isEmpty();
 
-        return Flux.create(sink -> {
-            tempChatModel.stream(prompt)
-                    .subscribe(
-                            response -> {
-                                String content = extractContent(response);
-                                if (content != null && !content.isEmpty()) {
-                                    sink.next(content);
-                                }
-                            },
-                            sink::error,
-                            sink::complete
-                    );
-        });
-    }
-
-    private Flux<String> streamChatWithMemory(String message, String conversationId, String apiKey, String baseUrl, String model) {
-        OpenAiApi tempApi = OpenAiApi.builder()
-                .apiKey(apiKey)
-                .baseUrl(baseUrl)
-                .build();
-
-        OpenAiChatModel tempChatModel = OpenAiChatModel.builder()
-                .openAiApi(tempApi)
-                .defaultOptions(OpenAiChatOptions.builder()
-                        .model(model)
-                        .temperature(0.7)
-                        .build())
-                .build();
-
-        ChatClient tempChatClient = ChatClient.builder(tempChatModel).build();
-
-        List<Message> history = chatMemoryService.getHistory(conversationId);
+        if (hasConversation) {
+            history = chatMemoryService.getHistory(conversationId);
+            chatMemoryService.addUserMessage(conversationId, message);
+        }
 
         StringBuilder fullResponse = new StringBuilder();
 
-        chatMemoryService.addUserMessage(conversationId, message);
-
         return Flux.create(sink -> {
-            tempChatClient.prompt()
-                    .messages(history.toArray(new Message[0]))
-                    .user(message)
-                    .stream()
+            var promptBuilder = chatClient.prompt();
+            if (history != null && !history.isEmpty()) {
+                promptBuilder.messages(history.toArray(new Message[0]));
+            }
+            promptBuilder.user(enhancedPrompt);
+
+            promptBuilder.stream()
                     .content()
                     .subscribe(
                             response -> {
@@ -282,31 +241,13 @@ public class LlmServiceImpl implements LlmService {
                             },
                             sink::error,
                             () -> {
-                                chatMemoryService.addAssistantMessage(conversationId, fullResponse.toString());
+                                if (hasConversation) {
+                                    chatMemoryService.addAssistantMessage(conversationId, fullResponse.toString());
+                                }
                                 sink.complete();
                             }
                     );
         });
-    }
-
-    @Override
-    public Flux<String> streamChatWithSearch(String model, String message, String conversationId) {
-        // 1. 先用 Minimax MCP 搜索获取实时信息
-        // 注意：mcpSearch 是同步阻塞调用，这是当前设计的权衡。
-        // 搜索结果作为增强上下文整合到响应中，用户会先等待搜索完成，再开始接收流式响应。
-        // 如需完全非阻塞，可考虑将搜索结果缓存或异步预取。
-        String searchResults = mcpSearch(message);
-
-        // 2. 构建增强提示词：搜索结果 + 用户问题
-        String enhancedPrompt = buildEnhancedPrompt(message, searchResults);
-
-        // 3. 用用户选择的模型流式回答
-        LlmModel llmModel = LlmModel.fromValue(model);
-        String finalApiKey = getApiKeyForModel(llmModel);
-        String finalBaseUrl = getBaseUrlForModel(llmModel);
-        String modelName = getModelNameForModel(llmModel);
-
-        return streamChatWithMemory(enhancedPrompt, conversationId, finalApiKey, finalBaseUrl, modelName);
     }
 
     private String buildEnhancedPrompt(String question, String searchResults) {
@@ -336,90 +277,16 @@ public class LlmServiceImpl implements LlmService {
 
     @Override
     public String chat(String model, String message) {
-        LlmModel llmModel = LlmModel.fromValue(model);
-
-        String finalApiKey = getApiKeyForModel(llmModel);
-        String finalBaseUrl = getBaseUrlForModel(llmModel);
-        String modelName = getModelNameForModel(llmModel);
-        return chat(message, finalApiKey, finalBaseUrl, modelName);
+        ChatClient chatClient = chatClientRouter.get(model);
+        return chatClient.prompt()
+                .user(message)
+                .call()
+                .content();
     }
 
     @Override
     public String chat(String message) {
         return chat("deepseek", message);
-    }
-
-
-    private String chat(String message, String apiKey, String baseUrl, String model) {
-        OpenAiApi tempApi = OpenAiApi.builder()
-                .apiKey(apiKey)
-                .baseUrl(baseUrl)
-                .build();
-
-        OpenAiChatModel tempChatModel = OpenAiChatModel.builder()
-                .openAiApi(tempApi)
-                .defaultOptions(OpenAiChatOptions.builder()
-                        .model(model)
-                        .temperature(0.7)
-                        .build())
-                .build();
-
-        Prompt prompt = new Prompt(new UserMessage(message));
-        ChatResponse response = tempChatModel.call(prompt);
-        return extractContent(response);
-    }
-
-    private String getApiKeyForModel(LlmModel model) {
-        return switch (model) {
-            case DEEPSEEK -> deepSeekApiKey != null && !deepSeekApiKey.isEmpty()
-                    ? deepSeekApiKey : openAiApiKey;
-            case GLM -> glmApiKey != null && !glmApiKey.isEmpty()
-                    ? glmApiKey : openAiApiKey;
-            case QWEN -> dashScopeApiKey != null && !dashScopeApiKey.isEmpty()
-                    ? dashScopeApiKey : openAiApiKey;
-            case OPENAI -> openAiApiKey;
-            default -> throw new UnsupportedOperationException("Unsupported model for API key: " + model);
-        };
-    }
-
-    private String getBaseUrlForModel(LlmModel model) {
-        return switch (model) {
-            case DEEPSEEK -> deepSeekBaseUrl;
-            case GLM -> glmBaseUrl;
-            case QWEN -> dashScopeBaseUrl;
-            case OPENAI -> openAiBaseUrl;
-            default -> throw new UnsupportedOperationException("Unsupported model for base URL: " + model);
-        };
-    }
-
-    private String getModelNameForModel(LlmModel model) {
-        return switch (model) {
-            case DEEPSEEK -> "deepseek-chat";
-            case GLM -> "glm-4";
-            case QWEN -> "qwen-turbo";
-            case OPENAI -> "gpt-3.5-turbo";
-            default -> throw new UnsupportedOperationException("Unsupported model for model name: " + model);
-        };
-    }
-
-    private String getKeySource(LlmModel model) {
-        return switch (model) {
-            case DEEPSEEK -> "deepseek";
-            case GLM -> "glm";
-            case QWEN -> "dashscope";
-            case OPENAI -> "openai";
-            default -> throw new UnsupportedOperationException("Unsupported model for key source: " + model);
-        };
-    }
-
-    private String extractContent(ChatResponse response) {
-        if (response != null &&
-                response.getResults() != null &&
-                !response.getResults().isEmpty()) {
-            String text = response.getResults().get(0).getOutput().getText();
-            return filterThinkingProcess(text);
-        }
-        return "";
     }
 
     /**
@@ -446,7 +313,7 @@ public class LlmServiceImpl implements LlmService {
     @Override
     public Flux<ServerSentEvent<StreamChunk>> smartStream(String model, String message, Boolean enableSearch) {
         // 如果启用搜索，先搜索再流式返回
-        if (Boolean.TRUE.equals(enableSearch) || (enableSearch == null && needsSearchBySemanticAnalysis(message))) {
+        if (Boolean.TRUE.equals(enableSearch) || (enableSearch == null && isSearchQuery(message))) {
             return smartStreamWithSearch(model, message);
         }
         return smartStreamDefault(model, message);
@@ -463,8 +330,8 @@ public class LlmServiceImpl implements LlmService {
         }
         String enhancedPrompt = buildEnhancedPrompt(message, searchResults);
 
-        // 2. 使用 deepseek 流式回答
-        ChatClient chatClient = chatClientRouter.get("deepseek");
+        // 2. 使用用户选择的模型流式回答
+        ChatClient chatClient = chatClientRouter.get(model);
         return chatClient.prompt()
                 .user(enhancedPrompt)
                 .stream()
@@ -482,7 +349,7 @@ public class LlmServiceImpl implements LlmService {
     }
 
     private Flux<ServerSentEvent<StreamChunk>> smartStreamDefault(String model, String message) {
-        ChatClient chatClient = chatClientRouter.get("deepseek");
+        ChatClient chatClient = chatClientRouter.get(model);
         return chatClient.prompt()
                 .user(message)
                 .stream()
