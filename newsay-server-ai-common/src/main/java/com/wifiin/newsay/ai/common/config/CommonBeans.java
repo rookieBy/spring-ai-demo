@@ -20,9 +20,6 @@ import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.web.client.RestTemplate;
 
-import com.wifiin.newsay.ai.llm.service.ChatMemoryService;
-import com.wifiin.newsay.ai.llm.service.impl.RedisChatMemoryServiceImpl;
-
 import javax.sql.DataSource;
 
 /**
@@ -151,16 +148,5 @@ public class CommonBeans {
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
-    }
-
-    // ==================== Chat Memory Configuration ====================
-
-    @Bean
-    public ChatMemoryService chatMemoryService(StringRedisTemplate stringRedisTemplate) {
-        return new RedisChatMemoryServiceImpl(
-                stringRedisTemplate,
-                20,  // slidingWindowSize
-                3600 // ttlSeconds
-        );
     }
 }

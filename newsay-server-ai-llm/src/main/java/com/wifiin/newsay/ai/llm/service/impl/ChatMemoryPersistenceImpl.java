@@ -38,7 +38,7 @@ public class ChatMemoryPersistenceImpl implements ChatMemoryPersistence {
             for (Message msg : messages) {
                 msgList.add(java.util.Map.of(
                         "role", msg instanceof UserMessage ? "user" : "assistant",
-                        "content", msg.getContent()
+                        "content", msg.getText()
                 ));
             }
             String messagesJson = objectMapper.writeValueAsString(msgList);
