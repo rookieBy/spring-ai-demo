@@ -472,6 +472,42 @@ public class LlmServiceImpl implements LlmService {
 
     @Override
     public Flux<ServerSentEvent<StreamChunk>> smartStream(String model, String message) {
+        return smartStream(model, message, null);
+    }
+
+    @Override
+    public Flux<ServerSentEvent<StreamChunk>> smartStream(String model, String message, Boolean enableSearch) {
+        // 如果启用搜索，先搜索再流式返回
+        if (Boolean.TRUE.equals(enableSearch) || (enableSearch == null && needsSearchBySemanticAnalysis(message))) {
+            return smartStreamWithSearch(model, message);
+        }
+        return smartStreamDefault(model, message);
+    }
+
+    private Flux<ServerSentEvent<StreamChunk>> smartStreamWithSearch(String model, String message) {
+        // 1. MCP 搜索
+        String searchResults = mcpSearch(message);
+        String enhancedPrompt = buildEnhancedPrompt(message, searchResults);
+
+        // 2. 使用 deepseek 流式回答
+        ChatClient chatClient = chatClientRouter.get("deepseek");
+        return chatClient.prompt()
+                .user(enhancedPrompt)
+                .stream()
+                .content()
+                .transform(this::markdownAwareAggregator)
+                .map(chunk -> ServerSentEvent.<StreamChunk>builder()
+                        .data(chunk)
+                        .build())
+                .concatWith(Flux.just(
+                        ServerSentEvent.<StreamChunk>builder()
+                                .data(new StreamChunk("done", "", null))
+                                .event("complete")
+                                .build()
+                ));
+    }
+
+    private Flux<ServerSentEvent<StreamChunk>> smartStreamDefault(String model, String message) {
         ChatClient chatClient = chatClientRouter.get("deepseek");
         return chatClient.prompt()
                 .user(message)

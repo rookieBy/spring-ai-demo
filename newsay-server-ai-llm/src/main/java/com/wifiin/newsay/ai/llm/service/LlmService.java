@@ -51,5 +51,13 @@ public interface LlmService {
 
     Flux<ServerSentEvent<StreamChunk>> smartStream(String model, String message);
 
+    /**
+     * Streaming chat with markdown formatting and optional search augmentation
+     * @param model 模型名称
+     * @param message 用户消息
+     * @param enableSearch true=强制启用搜索, false=禁用搜索, null=自动检测
+     */
+    Flux<ServerSentEvent<StreamChunk>> smartStream(String model, String message, Boolean enableSearch);
+
     String mcpSearch(String message);
 }

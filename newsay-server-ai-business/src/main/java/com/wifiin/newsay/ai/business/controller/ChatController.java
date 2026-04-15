@@ -51,11 +51,11 @@ public class ChatController {
      */
     @PostMapping(value = "/stream/markdown", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<StreamChunk>> smartStream(@Valid @RequestBody ChatRequest request) {
-        log.info("Received streaming chat request - model: {}, message: {}",
-                request.getModel(), request.getMessage());
+        log.info("Received streaming chat request - model: {}, message: {}, enableSearch: {}",
+                request.getModel(), request.getMessage(), request.getEnableSearch());
 
         String model = request.getModel() != null ? request.getModel() : "deepseek";
-        return llmService.smartStream(model, request.getMessage());
+        return llmService.smartStream(model, request.getMessage(), request.getEnableSearch());
     }
 
     @GetMapping(value = "/thread-info", produces = MediaType.APPLICATION_JSON_VALUE)
