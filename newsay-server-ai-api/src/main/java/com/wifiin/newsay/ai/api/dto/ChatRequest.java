@@ -13,6 +13,14 @@ public class ChatRequest {
 
     private String conversationId;
 
+    /**
+     * 是否启用联网搜索增强（可选）
+     * true: 强制启用搜索
+     * false: 禁用搜索
+     * null: 自动检测（默认）
+     */
+    private Boolean enableSearch;
+
     public String getMessage() {
         return message;
     }
@@ -35,5 +43,13 @@ public class ChatRequest {
 
     public void setConversationId(String conversationId) {
         this.conversationId = conversationId;
+    }
+
+    public Boolean getEnableSearch() {
+        return enableSearch;
+    }
+
+    public void setEnableSearch(Boolean enableSearch) {
+        this.enableSearch = enableSearch;
     }
 }
