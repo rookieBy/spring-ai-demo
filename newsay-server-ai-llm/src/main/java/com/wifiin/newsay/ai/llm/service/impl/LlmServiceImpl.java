@@ -102,7 +102,7 @@ public class LlmServiceImpl implements LlmService {
 
     @Override
     public Flux<String> streamChat(String model, String message, String conversationId) {
-        return streamChat(model, message, conversationId, null);
+        return streamChat(model, message, conversationId, (Boolean) null);
     }
 
     @Override
@@ -414,6 +414,7 @@ public class LlmServiceImpl implements LlmService {
             case QWEN -> dashScopeApiKey != null && !dashScopeApiKey.isEmpty()
                     ? dashScopeApiKey : openAiApiKey;
             case OPENAI -> openAiApiKey;
+            default -> throw new UnsupportedOperationException("Unsupported model for API key: " + model);
         };
     }
 
@@ -423,6 +424,7 @@ public class LlmServiceImpl implements LlmService {
             case GLM -> glmBaseUrl;
             case QWEN -> dashScopeBaseUrl;
             case OPENAI -> openAiBaseUrl;
+            default -> throw new UnsupportedOperationException("Unsupported model for base URL: " + model);
         };
     }
 
@@ -432,6 +434,7 @@ public class LlmServiceImpl implements LlmService {
             case GLM -> "glm-4";
             case QWEN -> "qwen-turbo";
             case OPENAI -> "gpt-3.5-turbo";
+            default -> throw new UnsupportedOperationException("Unsupported model for model name: " + model);
         };
     }
 
@@ -441,6 +444,7 @@ public class LlmServiceImpl implements LlmService {
             case GLM -> "glm";
             case QWEN -> "dashscope";
             case OPENAI -> "openai";
+            default -> throw new UnsupportedOperationException("Unsupported model for key source: " + model);
         };
     }
 
