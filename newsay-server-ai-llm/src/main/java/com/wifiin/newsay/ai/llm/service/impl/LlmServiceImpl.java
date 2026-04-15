@@ -215,11 +215,10 @@ public class LlmServiceImpl implements LlmService {
 
         // 3. 使用 chatClientRouter 获取已配置的 ChatClient
         ChatClient chatClient = chatClientRouter.get(model);
-        List<Message> history = null;
         boolean hasConversation = conversationId != null && !conversationId.isEmpty();
+        List<Message> history = hasConversation ? chatMemoryService.getHistory(conversationId) : null;
 
         if (hasConversation) {
-            history = chatMemoryService.getHistory(conversationId);
             chatMemoryService.addUserMessage(conversationId, message);
         }
 
