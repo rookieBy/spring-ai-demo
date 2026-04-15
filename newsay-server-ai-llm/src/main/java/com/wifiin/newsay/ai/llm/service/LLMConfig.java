@@ -1,10 +1,13 @@
 package com.wifiin.newsay.ai.llm.service;
 
+import com.wifiin.newsay.ai.llm.service.impl.ChatMemoryPersistenceImpl;
+import com.wifiin.newsay.ai.llm.service.impl.RedisChatMemoryServiceImpl;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.json.McpJsonDefaults;
+import jakarta.annotation.PostConstruct;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
@@ -30,6 +33,12 @@ public class LLMConfig {
 
     @Autowired
     private LLMProperties properties;
+
+    @Autowired
+    private ChatMemoryService chatMemoryService;
+
+    @Autowired
+    private ChatMemoryPersistenceImpl chatMemoryPersistence;
 
     private ChatClient createClient(String providerName, @Nullable ToolCallbackProvider provider) {
         LLMProperties.ProviderConfig cfg = properties.getProvider(providerName);
@@ -149,5 +158,13 @@ public class LLMConfig {
         }
         System.out.println("=============" + router);
         return Collections.unmodifiableMap(router);
+    }
+
+    @PostConstruct
+    public void initChatMemoryPersistence() {
+        if (chatMemoryService instanceof RedisChatMemoryServiceImpl) {
+            ((RedisChatMemoryServiceImpl) chatMemoryService)
+                    .setChatMemoryPersistence(chatMemoryPersistence);
+        }
     }
 }

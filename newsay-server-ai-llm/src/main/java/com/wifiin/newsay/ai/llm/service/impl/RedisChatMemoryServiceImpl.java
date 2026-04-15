@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 /**
  * Redis-based Chat Memory Implementation with Sliding Window
  */
-@Service
+//@Service  // Disabled - managed via CommonBeans to enable ChatMemoryPersistence injection
 public class RedisChatMemoryServiceImpl implements ChatMemoryService {
 
     private static final Logger log = LoggerFactory.getLogger(RedisChatMemoryServiceImpl.class);

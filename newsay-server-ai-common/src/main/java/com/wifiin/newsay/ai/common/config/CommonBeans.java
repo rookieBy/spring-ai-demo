@@ -16,12 +16,14 @@ import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.web.client.RestTemplate;
 
+import com.wifiin.newsay.ai.llm.service.ChatMemoryService;
+import com.wifiin.newsay.ai.llm.service.impl.RedisChatMemoryServiceImpl;
+
 import javax.sql.DataSource;
-import java.util.Collections;
 
 /**
  * Common Beans Configuration
@@ -116,9 +118,9 @@ public class CommonBeans {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
         template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
+        template.setValueSerializer(new Jackson2JsonRedisSerializer<>(Object.class));
         template.setHashKeySerializer(new StringRedisSerializer());
-        template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer());
+        template.setHashValueSerializer(new Jackson2JsonRedisSerializer<>(Object.class));
         template.afterPropertiesSet();
         return template;
     }
@@ -149,5 +151,16 @@ public class CommonBeans {
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
+    }
+
+    // ==================== Chat Memory Configuration ====================
+
+    @Bean
+    public ChatMemoryService chatMemoryService(StringRedisTemplate stringRedisTemplate) {
+        return new RedisChatMemoryServiceImpl(
+                stringRedisTemplate,
+                20,  // slidingWindowSize
+                3600 // ttlSeconds
+        );
     }
 }
