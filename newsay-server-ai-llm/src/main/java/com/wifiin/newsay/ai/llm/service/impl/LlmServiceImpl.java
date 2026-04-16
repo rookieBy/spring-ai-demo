@@ -150,12 +150,14 @@ public class LlmServiceImpl implements LlmService {
                     .content()
                     .subscribe(
                             response -> {
-                                fullResponse.append(response);
-                                sink.next(response);
+                                String filtered = filterThinkingProcess(response);
+                                fullResponse.append(filtered);
+                                sink.next(filtered);
                             },
                             sink::error,
                             () -> {
-                                chatMemoryService.addAssistantMessage(conversationId, fullResponse.toString());
+                                String filteredResponse = filterThinkingProcess(fullResponse.toString());
+                                chatMemoryService.addAssistantMessage(conversationId, filteredResponse);
                                 sink.complete();
                             }
                     );
@@ -191,13 +193,15 @@ public class LlmServiceImpl implements LlmService {
                     .content()
                     .subscribe(
                             response -> {
-                                fullResponse.append(response);
-                                sink.next(response);
+                                String filtered = filterThinkingProcess(response);
+                                fullResponse.append(filtered);
+                                sink.next(filtered);
                             },
                             sink::error,
                             () -> {
                                 if (hasConversation) {
-                                    chatMemoryService.addAssistantMessage(conversationId, fullResponse.toString());
+                                    String filteredResponse = filterThinkingProcess(fullResponse.toString());
+                                    chatMemoryService.addAssistantMessage(conversationId, filteredResponse);
                                 }
                                 sink.complete();
                             }
@@ -235,13 +239,15 @@ public class LlmServiceImpl implements LlmService {
                     .content()
                     .subscribe(
                             response -> {
-                                fullResponse.append(response);
-                                sink.next(response);
+                                String filtered = filterThinkingProcess(response);
+                                fullResponse.append(filtered);
+                                sink.next(filtered);
                             },
                             sink::error,
                             () -> {
                                 if (hasConversation) {
-                                    chatMemoryService.addAssistantMessage(conversationId, fullResponse.toString());
+                                    String filteredResponse = filterThinkingProcess(fullResponse.toString());
+                                    chatMemoryService.addAssistantMessage(conversationId, filteredResponse);
                                 }
                                 sink.complete();
                             }
@@ -296,9 +302,16 @@ public class LlmServiceImpl implements LlmService {
         if (text == null || text.isEmpty()) {
             return text;
         }
-        return text.replaceAll("<think>[\\s\\S]*?</think>", "")
-                .replaceAll("\\[\\[Final Answer\\]\\]", "")
-                .trim();
+        // 过滤 <think>... 思考过程标签
+        String filtered = text.replaceAll("<think>[\\s\\S]*?", "");
+        if (!filtered.equals(text)) {
+            log.info("Filtered thinking: originalLength={}, filteredLength={}", text.length(), filtered.length());
+        }
+        // 过滤 [[Final Answer]] 等标记
+        filtered = filtered.replaceAll("\\[\\[Final Answer\\]\\]", "");
+        // 过滤 【思考】...【/思考】标签
+        filtered = filtered.replaceAll("【思考】[\\s\\S]*?【/思考】", "");
+        return filtered.trim();
     }
 
 

@@ -1,5 +1,7 @@
 package com.wifiin.newsay.ai.llm.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wifiin.newsay.ai.llm.service.ChatMemoryService;
 import com.wifiin.newsay.ai.llm.service.ChatMemoryPersistence;
 import org.slf4j.Logger;
@@ -27,6 +29,8 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
 
     private static final Logger log = LoggerFactory.getLogger(RedisChatMemoryServiceImpl.class);
     private static final String KEY_PREFIX = "chat:memory:";
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private final StringRedisTemplate redisTemplate;
     private final int slidingWindowSize;
@@ -123,21 +127,20 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
     }
 
     private String toJson(String role, String content) {
-        return "{\"role\":\"" + role + "\",\"content\":\"" + escapeJson(content) + "\"}";
+        try {
+            return objectMapper.writeValueAsString(java.util.Map.of("role", role, "content", content));
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize message", e);
+            String escaped = content.replace("\\", "\\\\").replace("\"", "\\\"");
+            return "{\"role\":\"" + role + "\",\"content\":\"" + escaped + "\"}";
+        }
     }
 
     private Message parseMessage(String json) {
         try {
-            int roleStart = json.indexOf("\"role\":\"") + 8;
-            int roleEnd = json.indexOf("\"", roleStart);
-            String role = json.substring(roleStart, roleEnd);
-
-            int contentStart = json.indexOf("\"content\":\"") + 11;
-            int contentEnd = json.lastIndexOf("\"}");
-            String content = json.substring(contentStart, contentEnd);
-
-            content = unescapeJson(content);
-
+            java.util.Map<String, String> msg = objectMapper.readValue(json, java.util.Map.class);
+            String role = msg.get("role");
+            String content = msg.get("content");
             return switch (role) {
                 case "user" -> new UserMessage(content);
                 case "assistant" -> new AssistantMessage(content);
@@ -147,23 +150,5 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
             log.error("Failed to parse message: {}", json, e);
             return new UserMessage(json);
         }
-    }
-
-    private String escapeJson(String text) {
-        if (text == null) return "";
-        return text.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
-    }
-
-    private String unescapeJson(String text) {
-        if (text == null) return "";
-        return text.replace("\\n", "\n")
-                .replace("\\r", "\r")
-                .replace("\\t", "\t")
-                .replace("\\\"", "\"")
-                .replace("\\\\", "\\");
     }
 }

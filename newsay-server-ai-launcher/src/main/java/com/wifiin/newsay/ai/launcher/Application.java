@@ -4,6 +4,7 @@ import org.redisson.spring.starter.RedissonAutoConfigurationV2;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 
 /**
@@ -13,6 +14,7 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 @SpringBootApplication(scanBasePackages = {"com.wifiin.newsay.**"},
         exclude = {RedissonAutoConfigurationV2.class})
 @EnableAspectJAutoProxy
+@EnableScheduling
 public class Application {
 
     public static void main(String[] args) {
