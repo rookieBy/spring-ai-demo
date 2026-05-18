@@ -1,6 +1,7 @@
 package com.wifiin.newsay.ai.rag.service.impl;
 
 import com.wifiin.newsay.ai.rag.model.DocumentChunk;
+import com.wifiin.newsay.ai.rag.service.EmbeddingService;
 import com.wifiin.newsay.ai.rag.service.VectorStoreService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +15,11 @@ public class MilvusVectorStoreServiceImpl implements VectorStoreService {
     private static final Logger log = LoggerFactory.getLogger(MilvusVectorStoreServiceImpl.class);
 
     private final Map<String, Map<String, DocumentChunk>> collections = new HashMap<>();
+    private final EmbeddingService embeddingService;
+
+    public MilvusVectorStoreServiceImpl(EmbeddingService embeddingService) {
+        this.embeddingService = embeddingService;
+    }
 
     @Override
     public void createCollectionIfNotExists(String collectionName, int dimension) {
@@ -34,12 +40,18 @@ public class MilvusVectorStoreServiceImpl implements VectorStoreService {
     public List<SearchResult> similaritySearch(String collectionName, String queryText, int topK) {
         Map<String, DocumentChunk> collection = collections.get(collectionName);
         if (collection == null || collection.isEmpty()) {
+            log.warn("Collection {} is empty or does not exist", collectionName);
             return List.of();
         }
 
+        var queryEmbedding = embeddingService.embed(queryText);
+        var queryVec = queryEmbedding.getVector();
+
         List<SearchResult> results = new ArrayList<>();
         for (DocumentChunk chunk : collection.values()) {
-            results.add(new SearchResult(chunk.getId(), chunk.getContent(), 0.9, chunk.getMetadata()));
+            var chunkEmbedding = embeddingService.embed(chunk.getContent());
+            double score = embeddingService.cosineSimilarity(queryVec, chunkEmbedding.getVector());
+            results.add(new SearchResult(chunk.getId(), chunk.getContent(), score, chunk.getMetadata()));
         }
 
         results.sort((a, b) -> Double.compare(b.score(), a.score()));
