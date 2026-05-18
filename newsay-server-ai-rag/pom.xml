@@ -16,6 +16,13 @@
     <description>RAG Module with Milvus Vector Store and Graph RAG</description>
 
     <dependencies>
+        <!-- Common Module (for Result class) -->
+        <dependency>
+            <groupId>com.wifiin.newsay.ai</groupId>
+            <artifactId>newsay-server-ai-common</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- LLM Module -->
         <dependency>
             <groupId>com.wifiin.newsay.ai</groupId>
@@ -49,7 +56,7 @@
             <version>2.9.1</version>
         </dependency>
 
-        <!-- Testcontainers (without milvus artifact) -->
+        <!-- Testcontainers -->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
